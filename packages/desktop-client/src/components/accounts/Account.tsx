@@ -55,6 +55,7 @@ import type {
 } from '#components/transactions/table/columns';
 import { TransactionList } from '#components/transactions/TransactionList';
 import { validateAccountName } from '#components/util/accountValidation';
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { useAccountPreviewTransactions } from '#hooks/useAccountPreviewTransactions';
 import { useAccounts } from '#hooks/useAccounts';
 import { SchedulesProvider } from '#hooks/useCachedSchedules';
@@ -233,6 +234,9 @@ type AccountInternalProps = {
   saveColumns: (columns: TransactionTableColumn[], applyToAll: boolean) => void;
   modalShowing?: boolean;
   accounts: AccountEntity[];
+  // The currency of the account of this page when it is not the
+  // currency of the budget. Such a page shows native amounts.
+  foreignCurrency: string | null;
   newTransactions: Array<TransactionEntity['id']>;
   matchedTransactions: Array<TransactionEntity['id']>;
   splitsExpandedDispatch: ReturnType<typeof useSplitsExpanded>['dispatch'];
@@ -702,6 +706,13 @@ class AccountInternal extends PureComponent<
     }
   };
 
+  // The page of a foreign currency account adds the amounts in the
+  // currency of the account. All other pages add the values in the
+  // currency of the budget, as before.
+  get amountField() {
+    return this.props.foreignCurrency ? '$native_amount' : '$amount';
+  }
+
   async calculateBalances() {
     if (!this.canCalculateBalance() || !this.paged) {
       return null;
@@ -711,7 +722,7 @@ class AccountInternal extends PureComponent<
       await aqlQuery(
         this.paged.query
           .options({ splits: 'none' })
-          .select([{ balance: { $sumOver: '$amount' } }]),
+          .select([{ balance: { $sumOver: this.amountField } }]),
       );
 
     return data.reduce((balances: Record<string, number>, row) => {
@@ -1042,7 +1053,9 @@ class AccountInternal extends PureComponent<
   getBalanceQuery(id?: string) {
     return {
       name: `balance-query-${id}`,
-      query: this.makeRootTransactionsQuery().calculate({ $sum: '$amount' }),
+      query: this.makeRootTransactionsQuery().calculate({
+        $sum: this.amountField,
+      }),
     } as const;
   }
 
@@ -1052,7 +1065,7 @@ class AccountInternal extends PureComponent<
     }
 
     const { data: amount } = await aqlQuery(
-      this.paged.query.calculate({ $sum: '$amount' }),
+      this.paged.query.calculate({ $sum: this.amountField }),
     );
     return amount;
   };
@@ -2009,11 +2022,13 @@ type AccountHackProps = Omit<
   | 'onBatchUnlinkSchedule'
   | 'onBatchDelete'
   | 'onSetTransfer'
+  | 'foreignCurrency'
 >;
 
 function AccountHack(props: AccountHackProps) {
   const { dispatch: splitsExpandedDispatch } = useSplitsExpanded();
   const dispatch = useDispatch();
+  const { foreignCurrencyOf } = useAccountCurrencies();
   const {
     onBatchEdit,
     onBatchDuplicate,
@@ -2033,6 +2048,7 @@ function AccountHack(props: AccountHackProps) {
       onBatchUnlinkSchedule={onBatchUnlinkSchedule}
       onBatchDelete={onBatchDelete}
       onSetTransfer={onSetTransfer}
+      foreignCurrency={foreignCurrencyOf(props.accountId)}
       {...props}
     />
   );

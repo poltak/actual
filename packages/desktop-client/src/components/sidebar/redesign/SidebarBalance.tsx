@@ -7,18 +7,22 @@ type SidebarBalanceProps<FieldName extends SheetFields<'account'>> = {
   binding: Binding<'account', FieldName>;
   style?: CSSProperties;
   testId?: string;
+  // The currency of the balance when it is not the currency of the budget
+  currency?: string | null;
 };
 
 export function SidebarBalance<FieldName extends SheetFields<'account'>>({
   binding,
   style,
   testId,
+  currency,
 }: SidebarBalanceProps<FieldName>) {
   return (
     <CellValue<'account', FieldName> binding={binding} type="financial">
       {props => (
         <CellValueText<'account', FieldName>
           {...props}
+          currency={currency}
           data-testid={testId ?? props.name}
           style={{ textAlign: 'right', ...style }}
         />

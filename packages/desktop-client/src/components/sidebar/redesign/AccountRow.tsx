@@ -15,6 +15,7 @@ import { css } from '@emotion/css';
 
 import { useReopenAccountMutation, useUpdateAccountMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
+import { useForeignCurrencyOf } from '#hooks/useAccountCurrencies';
 import { useContextMenu } from '#hooks/useContextMenu';
 import { useUpdatedAccounts } from '#hooks/useUpdatedAccounts';
 import { openAccountCloseModal, pushModal } from '#modals/modalsSlice';
@@ -41,6 +42,7 @@ export function AccountRow({
   showSyncDot,
 }: AccountRowProps) {
   const { t } = useTranslation();
+  const currency = useForeignCurrencyOf(account);
   const dispatch = useDispatch();
   const location = useLocation();
   const syncingAccountIds = useSelector(state => state.account.accountsSyncing);
@@ -196,6 +198,7 @@ export function AccountRow({
               <Text style={styles.visuallyHidden}>{statusLabel}</Text>
               <SidebarBalance
                 binding={bindings.accountBalance(account.id)}
+                currency={currency}
                 style={{
                   fontSize: 12,
                   color: 'inherit',

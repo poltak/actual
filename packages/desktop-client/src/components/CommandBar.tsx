@@ -23,6 +23,7 @@ import { View } from '@actual-app/components/view';
 import { css } from '@emotion/css';
 import { Command } from 'cmdk';
 
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { useAccounts } from '#hooks/useAccounts';
 import { useDashboardPages } from '#hooks/useDashboardPages';
 import { useMetadataPref } from '#hooks/useMetadataPref';
@@ -66,9 +67,12 @@ function BalanceRow<
 >({
   label,
   binding,
+  currency,
 }: {
   label: string;
   binding: Binding<SheetName, FieldName>;
+  // The currency of the balance when it is not the currency of the budget
+  currency?: string | null;
 }) {
   return (
     <View
@@ -84,6 +88,7 @@ function BalanceRow<
         {props => (
           <CellValueText
             {...props}
+            currency={currency}
             style={{ ...styles.tnum, whiteSpace: 'nowrap', opacity: 0.9 }}
           />
         )}
@@ -142,6 +147,7 @@ export function CommandBar() {
   }, [open]);
 
   const { data: allAccounts = [] } = useAccounts();
+  const { foreignCurrencyOf } = useAccountCurrencies();
   const { data: customReports = [] } = useReports();
   const { data: dashboardPages = [] } = useDashboardPages();
 
@@ -214,6 +220,7 @@ export function CommandBar() {
             <BalanceRow<'account', 'balance'>
               label={account.name}
               binding={accountBalance(account.id)}
+              currency={foreignCurrencyOf(account.id)}
             />
           ),
           Icon: SvgPiggyBank,

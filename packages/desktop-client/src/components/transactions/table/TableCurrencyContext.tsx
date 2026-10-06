@@ -8,6 +8,12 @@ type TableCurrencies = {
   pageCurrency: string | null;
   // The currency of an account when it is not the currency of the budget
   foreignCurrencyOf: (accountId: string | null | undefined) => string | null;
+  // The account that a transfer payee stands for. Null for all other
+  // payees. A list that does not give this has no menu item for the
+  // amounts of a transfer.
+  transferAccountOf?: (payeeId: string | null | undefined) => string | null;
+  // Loads the rows of the page again, after a dialog changed one
+  onRefetch?: () => void;
 };
 
 const TableCurrencyContext = createContext<TableCurrencies>({
@@ -27,13 +33,15 @@ type TableCurrencyProviderProps = TableCurrencies & {
 export function TableCurrencyProvider({
   pageCurrency,
   foreignCurrencyOf,
+  transferAccountOf,
+  onRefetch,
   children,
 }: TableCurrencyProviderProps) {
-  // The same object while the two values are the same, so that the rows
-  // of the table do not draw again for no reason
+  // The same object while the values are the same, so that the rows of
+  // the table do not draw again for no reason
   const value = useMemo(
-    () => ({ pageCurrency, foreignCurrencyOf }),
-    [pageCurrency, foreignCurrencyOf],
+    () => ({ pageCurrency, foreignCurrencyOf, transferAccountOf, onRefetch }),
+    [pageCurrency, foreignCurrencyOf, transferAccountOf, onRefetch],
   );
 
   return (

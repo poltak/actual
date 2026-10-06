@@ -8,6 +8,9 @@ import { logger } from '#platform/server/log';
 import { addTransactions } from '#server/accounts/sync';
 import { createApp } from '#server/app';
 import { aqlQuery } from '#server/aql';
+import { MissingRateError } from '#server/currencies/plan';
+import { ensureRates } from '#server/currencies/rates';
+import type { FetchRates, RateRequest } from '#server/currencies/rates';
 import * as db from '#server/db';
 import { toDateRepr } from '#server/models';
 import { mutator, runMutator } from '#server/mutators';
@@ -638,7 +641,20 @@ async function advanceRecurringScheduleFromNextDate(
 
 // TODO: make this sequential
 
-export async function advanceSchedulesService(syncSuccess) {
+/**
+ * Posts the schedules that are due and moves the paid ones forward.
+ *
+ * A schedule in a foreign currency account needs an exchange rate for
+ * its date. This function runs inside a mutator, so it cannot download
+ * one. A schedule with no rate stays due, the other schedules continue,
+ * and the result lists the rates that are necessary. See
+ * `runSchedulesService`.
+ */
+export async function advanceSchedulesService(
+  syncSuccess,
+): Promise<{ missingRates: RateRequest[] }> {
+  const missingRates: RateRequest[] = [];
+
   // Move all paid schedules
   const { data: schedules } = await aqlQuery(
     q('schedules')
@@ -714,7 +730,16 @@ export async function advanceSchedulesService(syncSuccess) {
 
         // Automatically create a transaction for due schedules.
         if (syncSuccess) {
-          await postTransactionForSchedule({ id: currentSchedule.id });
+          try {
+            await postTransactionForSchedule({ id: currentSchedule.id });
+          } catch (error) {
+            if (error instanceof MissingRateError) {
+              // Nothing was written. The schedule stays due.
+              missingRates.push(error.meta);
+              break;
+            }
+            throw error;
+          }
 
           didPost = true;
         } else {
@@ -783,6 +808,50 @@ export async function advanceSchedulesService(syncSuccess) {
       syncDisabled: false,
     });
   }
+
+  return { missingRates };
+}
+
+// A schedule that missed some dates can need a rate for each of them,
+// and each run of the service stops such a schedule at the first one
+const MAX_RATE_ROUNDS = 5;
+
+/**
+ * Runs the schedule service, gets the exchange rates that it did not
+ * find, and runs it again while that gives new rates.
+ *
+ * The download is between the runs and not in them, because a mutator
+ * cannot wait for the network.
+ */
+export async function runSchedulesService({
+  syncSuccess,
+  fetchRates,
+}: {
+  syncSuccess: boolean;
+  // A test gives its own function, so that it never uses the network
+  fetchRates?: FetchRates;
+}): Promise<void> {
+  for (let round = 0; round < MAX_RATE_ROUNDS; round++) {
+    const { missingRates } = await runMutator(() =>
+      advanceSchedulesService(syncSuccess),
+    );
+    if (missingRates.length === 0) {
+      return;
+    }
+
+    const { missing } = await ensureRates({
+      requests: missingRates,
+      ...(fetchRates && { fetchRates }),
+    });
+    if (missing.length >= missingRates.length) {
+      // No new rate, so a new run gives the same result
+      return;
+    }
+  }
+}
+
+async function forceRunSchedulesService(): Promise<void> {
+  await runSchedulesService({ syncSuccess: true });
 }
 
 export type SchedulesHandlers = {
@@ -792,7 +861,7 @@ export type SchedulesHandlers = {
   'schedule/move': typeof moveSchedule;
   'schedule/skip-next-date': typeof skipNextDate;
   'schedule/post-transaction': typeof postTransactionForSchedule;
-  'schedule/force-run-service': typeof advanceSchedulesService;
+  'schedule/force-run-service': typeof forceRunSchedulesService;
   'schedule/discover': typeof discoverSchedules;
   'schedule/get-upcoming-dates': typeof getUpcomingDates;
 };
@@ -809,10 +878,8 @@ app.method(
   'schedule/post-transaction',
   mutator(undoable(postTransactionForSchedule)),
 );
-app.method(
-  'schedule/force-run-service',
-  mutator(() => advanceSchedulesService(true)),
-);
+// Not a mutator here. The service starts one for each of its runs.
+app.method('schedule/force-run-service', forceRunSchedulesService);
 app.method('schedule/discover', discoverSchedules);
 app.method('schedule/get-upcoming-dates', getUpcomingDates);
 
@@ -830,7 +897,7 @@ app.events.on('sync', ({ type }) => {
 
     const { lastScheduleRun } = prefs.getPrefs();
     if (lastScheduleRun !== currentDay()) {
-      void runMutator(() => advanceSchedulesService(type === 'success'));
+      void runSchedulesService({ syncSuccess: type === 'success' });
 
       // Only mark the day as done when sync succeeded, so that
       // schedule auto-posting is retried on subsequent successful syncs

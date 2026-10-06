@@ -174,6 +174,7 @@ export function DiscoverSchedules() {
       // Now query for matching transactions and link them automatically
       const { filters } = await send('make-filters-from-conditions', {
         conditions: schedule._conditions,
+        amountField: 'native_amount',
       });
 
       if (filters.length > 0) {

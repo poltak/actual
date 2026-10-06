@@ -384,6 +384,7 @@ export function useScheduleEdit({
 
       void send('make-filters-from-conditions', {
         conditions,
+        amountField: 'native_amount',
       }).then(({ filters }) => {
         if (current) {
           const live = liveQuery<TransactionEntity>(

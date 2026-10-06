@@ -63,12 +63,7 @@ import {
   ungroupTransactions,
   updateTransaction,
 } from '@actual-app/core/shared/transactions';
-import {
-  amountToCurrency,
-  currencyToAmount,
-  integerToCurrency,
-  titleFirst,
-} from '@actual-app/core/shared/util';
+import { titleFirst } from '@actual-app/core/shared/util';
 import type { IntegerAmount } from '@actual-app/core/shared/util';
 import type {
   AccountEntity,
@@ -154,8 +149,11 @@ import {
   useTransactionTableColumnLabels,
 } from './table/columns';
 import type { TransactionTableColumnId } from './table/columns';
+import { useTableCurrencies } from './table/TableCurrencyContext';
 import {
   deserializeTransaction,
+  formatAmount,
+  formatTypedAmount,
   isLastChild,
   makeTemporaryTransactions,
   selectAscDesc,
@@ -200,12 +198,16 @@ function measureAmountColumnWidth(values: string[], minWidth: number) {
 export function useAmountColumnWidths(
   transactions: TransactionEntity[],
   balances: Record<TransactionEntity['id'], IntegerAmount> | null,
+  // The currency of the amounts when it is not the currency of the budget
+  currencyCode?: string | null,
 ): AmountColumnWidths {
   const debitCreditValues = transactions.map(t =>
-    integerToCurrency(Math.abs(t.amount ?? 0)),
+    formatAmount(Math.abs(t.amount ?? 0), currencyCode),
   );
   const balanceValues = balances
-    ? Object.values(balances).map(balance => integerToCurrency(balance))
+    ? Object.values(balances).map(balance =>
+        formatAmount(balance, currencyCode),
+      )
     : [];
 
   return {
@@ -1102,6 +1104,19 @@ const Transaction = memo(function Transaction({
 }: TransactionProps) {
   const { t } = useTranslation();
 
+  // The currency of the numbers in the amount cells of this row, when it
+  // is not the currency of the budget. On the page of a foreign currency
+  // account, all rows show the amount in the currency of the account. A
+  // new row is in the currency of its account on each page. A stored row
+  // of such an account on a page with more accounts shows its value in
+  // the currency of the budget, and can change only on its own page.
+  const { pageCurrency, foreignCurrencyOf } = useTableCurrencies();
+  const accountCurrency = foreignCurrencyOf(originalTransaction.account);
+  const isNewRow = isTemporaryId(originalTransaction.id);
+  const amountCurrency = pageCurrency ?? (isNewRow ? accountCurrency : null);
+  const isAmountReadOnly =
+    accountCurrency != null && pageCurrency == null && !isNewRow;
+
   const dispatch = useDispatch();
   const dispatchSelected = useSelectedDispatch();
   const triggerRef = useRef(null);
@@ -1109,7 +1124,11 @@ const Transaction = memo(function Transaction({
   const [prevShowZero, setPrevShowZero] = useState(showZeroInDeposit);
   const [prevTransaction, setPrevTransaction] = useState(originalTransaction);
   const [transaction, setTransaction] = useState(() =>
-    serializeTransaction(originalTransaction, showZeroInDeposit),
+    serializeTransaction(
+      originalTransaction,
+      showZeroInDeposit,
+      amountCurrency,
+    ),
   );
   const isPreview = isPreviewId(transaction.id);
 
@@ -1118,7 +1137,11 @@ const Transaction = memo(function Transaction({
     showZeroInDeposit !== prevShowZero
   ) {
     setTransaction(
-      serializeTransaction(originalTransaction, showZeroInDeposit),
+      serializeTransaction(
+        originalTransaction,
+        showZeroInDeposit,
+        amountCurrency,
+      ),
     );
     setPrevTransaction(originalTransaction);
     setPrevShowZero(showZeroInDeposit);
@@ -1271,10 +1294,13 @@ const Transaction = memo(function Transaction({
       const deserialized = deserializeTransaction(
         newTransaction,
         originalTransaction,
+        amountCurrency,
       );
       // Run the transaction through the formatting so that we know
       // it's always showing the formatted result
-      setTransaction(serializeTransaction(deserialized, showZeroInDeposit));
+      setTransaction(
+        serializeTransaction(deserialized, showZeroInDeposit, amountCurrency),
+      );
 
       const deserializedName = ['credit', 'debit'].includes(name)
         ? 'amount'
@@ -1973,15 +1999,21 @@ const Transaction = memo(function Transaction({
             name="debit"
             exposed={focusedField === 'debit'}
             focused={focusedField === 'debit'}
-            value={debit === '' && credit === '' ? amountToCurrency(0) : debit}
+            value={
+              debit === '' && credit === ''
+                ? formatAmount(0, amountCurrency)
+                : debit
+            }
             formatter={value =>
               // reformat value so since we might have kept decimals
-              value ? amountToCurrency(currencyToAmount(value) || 0) : ''
+              formatTypedAmount(value, amountCurrency)
             }
             valueStyle={valueStyle}
             textAlign="right"
             title={debit}
-            onExpose={name => !isPreview && onEdit(id, name)}
+            onExpose={name =>
+              !isPreview && !isAmountReadOnly && onEdit(id, name)
+            }
             style={{
               ...(isParent && { fontStyle: 'italic' }),
               ...styles.tnum,
@@ -1989,7 +2021,9 @@ const Transaction = memo(function Transaction({
             }}
             inputProps={{
               value:
-                debit === '' && credit === '' ? amountToCurrency(0) : debit,
+                debit === '' && credit === ''
+                  ? formatAmount(0, amountCurrency)
+                  : debit,
               onUpdate: onUpdate.bind(null, 'debit'),
               'data-1p-ignore': true,
             }}
@@ -2011,12 +2045,14 @@ const Transaction = memo(function Transaction({
             value={credit}
             formatter={value =>
               // reformat value so since we might have kept decimals
-              value ? amountToCurrency(currencyToAmount(value) || 0) : ''
+              formatTypedAmount(value, amountCurrency)
             }
             valueStyle={valueStyle}
             textAlign="right"
             title={credit}
-            onExpose={name => !isPreview && onEdit(id, name)}
+            onExpose={name =>
+              !isPreview && !isAmountReadOnly && onEdit(id, name)
+            }
             style={{
               ...(isParent && { fontStyle: 'italic' }),
               ...styles.tnum,
@@ -2041,7 +2077,7 @@ const Transaction = memo(function Transaction({
             value={
               runningBalance == null || isChild || isTemporaryId(id)
                 ? ''
-                : integerToCurrency(runningBalance)
+                : formatAmount(runningBalance, pageCurrency)
             }
             valueStyle={{
               color:
@@ -2209,7 +2245,7 @@ const Transaction = memo(function Transaction({
                 textAlign: 'right',
               }}
             >
-              {integerToCurrency(amount)}
+              {formatAmount(amount, amountCurrency)}
             </Text>
           </View>
         )}
@@ -2326,6 +2362,8 @@ type TransactionErrorProps = {
   onAddSplit: () => void;
   onDistributeRemainder: () => void;
   style?: CSSProperties;
+  // The currency of the amount when it is not the currency of the budget
+  currencyCode?: string | null;
 };
 
 function TransactionError({
@@ -2334,6 +2372,7 @@ function TransactionError({
   onAddSplit,
   onDistributeRemainder,
   style,
+  currencyCode,
 }: TransactionErrorProps) {
   switch (error.type) {
     case 'SplitTransactionError':
@@ -2352,8 +2391,9 @@ function TransactionError({
             <Text style={{ whiteSpace: 'nowrap' }}>
               <Trans>Amount left:</Trans>{' '}
               <Text style={{ fontWeight: 500 }}>
-                {integerToCurrency(
+                {formatAmount(
                   isDeposit ? error.difference : -error.difference,
+                  currencyCode,
                 )}
               </Text>
             </Text>
@@ -2450,6 +2490,7 @@ function NewTransaction({
   balance,
   showHiddenCategories,
 }: NewTransactionProps) {
+  const { pageCurrency, foreignCurrencyOf } = useTableCurrencies();
   const error = transactions[0].error;
   const isDeposit = transactions[0].amount > 0;
   const isFuture = isFutureTransaction(transactions[0]);
@@ -2558,6 +2599,9 @@ function NewTransaction({
             onAddSplit={() => onAddSplit(transactions[0].id)}
             onDistributeRemainder={() =>
               onDistributeRemainder(transactions[0].id)
+            }
+            currencyCode={
+              pageCurrency ?? foreignCurrencyOf(transactions[0].account)
             }
           />
         ) : (
@@ -2724,9 +2768,11 @@ function TransactionTableInner({
     [props.transactions, props.showReconciled],
   );
 
+  const { pageCurrency } = useTableCurrencies();
   const amountColumnWidths = useAmountColumnWidths(
     transactionsToRender,
     props.balances,
+    pageCurrency,
   );
 
   const renderRow: TableProps<TransactionEntity>['renderItem'] = ({
@@ -2859,6 +2905,7 @@ function TransactionTableInner({
               onDistributeRemainder={() =>
                 props.onDistributeRemainder(trans.id)
               }
+              currencyCode={pageCurrency}
             />
           )
         }

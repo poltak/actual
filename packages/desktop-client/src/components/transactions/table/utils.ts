@@ -1,10 +1,18 @@
 import { evalArithmetic } from '@actual-app/core/shared/arithmetic';
+import { getDecimalPlaces } from '@actual-app/core/shared/currencies';
 import { currentDay } from '@actual-app/core/shared/months';
 import {
+  amountToCurrency,
   amountToInteger,
+  currencyToAmount,
+  getNumberFormat,
+  integerToCurrency,
   integerToCurrencyWithDecimal,
 } from '@actual-app/core/shared/util';
-import type { CurrencyAmount } from '@actual-app/core/shared/util';
+import type {
+  CurrencyAmount,
+  IntegerAmount,
+} from '@actual-app/core/shared/util';
 import type {
   AccountEntity,
   CategoryEntity,
@@ -28,9 +36,44 @@ export type TransactionUpdateFunction = <T extends keyof SerializedTransaction>(
   value: SerializedTransaction[T],
 ) => void;
 
+/**
+ * The text of an amount for a cell.
+ *
+ * With a currency code, the amount is in that currency: the row is in a
+ * foreign currency account. It then shows the decimals of that currency,
+ * and "Hide decimal places" does not apply.
+ */
+export function formatAmount(
+  value: IntegerAmount,
+  currencyCode?: string | null,
+): string {
+  return currencyCode
+    ? integerToCurrencyWithDecimal(value, currencyCode)
+    : integerToCurrency(value);
+}
+
+/** Formats the text of an amount cell again, after the user typed in it */
+export function formatTypedAmount(
+  value: string,
+  currencyCode?: string | null,
+): string {
+  if (!value) {
+    return '';
+  }
+  const amount = currencyToAmount(value) || 0;
+  if (!currencyCode) {
+    return amountToCurrency(amount);
+  }
+  return getNumberFormat({
+    decimalPlaces: getDecimalPlaces(currencyCode),
+  }).formatter.format(amount);
+}
+
 export function serializeTransaction(
   transaction: TransactionEntity,
   showZeroInDeposit?: boolean,
+  // The currency of the amount when it is not the currency of the budget
+  currencyCode?: string | null,
 ): SerializedTransaction {
   const { amount, date: originalDate } = transaction;
 
@@ -61,14 +104,22 @@ export function serializeTransaction(
   return {
     ...transaction,
     date,
-    debit: debit != null ? integerToCurrencyWithDecimal(debit) : '',
-    credit: credit != null ? integerToCurrencyWithDecimal(credit) : '',
+    debit:
+      debit != null
+        ? integerToCurrencyWithDecimal(debit, currencyCode || undefined)
+        : '',
+    credit:
+      credit != null
+        ? integerToCurrencyWithDecimal(credit, currencyCode || undefined)
+        : '',
   };
 }
 
 export function deserializeTransaction(
   transaction: SerializedTransaction,
   originalTransaction: TransactionEntity,
+  // The currency of the amount when it is not the currency of the budget
+  currencyCode?: string | null,
 ) {
   const { debit, credit, date: originalDate, ...realTransaction } = transaction;
 
@@ -82,7 +133,10 @@ export function deserializeTransaction(
 
   amount =
     amount != null
-      ? amountToInteger(amount)
+      ? amountToInteger(
+          amount,
+          currencyCode ? getDecimalPlaces(currencyCode) : undefined,
+        )
       : (realTransaction.amount ?? originalTransaction.amount);
   let date = originalDate;
   if (date == null) {

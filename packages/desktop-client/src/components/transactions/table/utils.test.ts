@@ -1,7 +1,14 @@
+import { setNumberFormat } from '@actual-app/core/shared/util';
 import type { TransactionEntity } from '@actual-app/core/types/models';
 
 import type { SerializedTransaction } from './utils';
-import { deserializeTransaction, shouldApplyRuleChange } from './utils';
+import {
+  deserializeTransaction,
+  formatAmount,
+  formatTypedAmount,
+  serializeTransaction,
+  shouldApplyRuleChange,
+} from './utils';
 
 describe('shouldApplyRuleChange', () => {
   test('applies rule changes to empty fields', () => {
@@ -126,5 +133,61 @@ describe('deserializeTransaction', () => {
         { ...originalTransaction, amount: -2500 },
       ).amount,
     ).toBe(-2500);
+  });
+});
+
+describe('amounts in the currency of an account', () => {
+  // A budget in VND hides the decimals. An amount in USD keeps them.
+  beforeEach(() => {
+    setNumberFormat({ format: 'dot-comma', hideFraction: true });
+  });
+  afterEach(() => {
+    setNumberFormat({ format: 'comma-dot', hideFraction: false });
+  });
+
+  const usdRow = {
+    id: 't1',
+    account: 'wise-usd',
+    date: '2026-10-01',
+    amount: -1000,
+  } satisfies TransactionEntity;
+
+  test('formatAmount shows the decimals of the currency', () => {
+    expect(formatAmount(123456, 'USD')).toBe('1.234,56');
+    expect(formatAmount(1000, 'USD')).toBe('10,00');
+    expect(formatAmount(1000, 'JPY')).toBe('1.000');
+  });
+
+  test('formatAmount follows the settings of the budget with no currency', () => {
+    expect(formatAmount(25000000)).toBe('250.000');
+    expect(formatAmount(25000000, null)).toBe('250.000');
+  });
+
+  test('formatTypedAmount keeps the decimals that the user typed', () => {
+    expect(formatTypedAmount('12,5', 'USD')).toBe('12,50');
+    expect(formatTypedAmount('', 'USD')).toBe('');
+    // With no currency, the budget hides the decimals
+    expect(formatTypedAmount('12,5')).toBe('13');
+  });
+
+  test('serializeTransaction writes the amount with its decimals', () => {
+    expect(serializeTransaction(usdRow, false, 'USD')).toMatchObject({
+      debit: '10,00',
+      credit: '',
+    });
+  });
+
+  test('deserializeTransaction reads an amount in the units of the currency', () => {
+    const serialized = serializeTransaction(usdRow, false, 'USD');
+
+    expect(
+      deserializeTransaction({ ...serialized, debit: '12,5' }, usdRow, 'USD')
+        .amount,
+    ).toBe(-1250);
+    // A currency with no decimals has no smaller unit
+    expect(
+      deserializeTransaction({ ...serialized, debit: '1.500' }, usdRow, 'JPY')
+        .amount,
+    ).toBe(-1500);
   });
 });

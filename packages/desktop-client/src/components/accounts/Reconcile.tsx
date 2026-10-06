@@ -18,6 +18,7 @@ import type { TransObjectLiteral } from '@actual-app/core/types/util';
 import { format as formatDate } from 'date-fns';
 import { t } from 'i18next';
 
+import { useForeignCurrencyOf } from '#hooks/useAccountCurrencies';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
 import { useLocale } from '#hooks/useLocale';
@@ -29,6 +30,8 @@ type ReconcilingMessageProps = {
   targetBalance: number;
   onDone: () => void;
   onCreateTransaction: (targetDiff: number) => void;
+  // The currency of the account when it is not the currency of the budget
+  currency?: string | null;
 };
 
 export function ReconcilingMessage({
@@ -36,6 +39,7 @@ export function ReconcilingMessage({
   targetBalance,
   onDone,
   onCreateTransaction,
+  currency,
 }: ReconcilingMessageProps) {
   const cleared =
     useSheetValue<'balance', `balance-query-${string}-cleared`>({
@@ -44,7 +48,7 @@ export function ReconcilingMessage({
       value: 0,
       query: balanceQuery.query.filter({ cleared: true }),
     }) ?? 0;
-  const format = useFormat();
+  const format = useFormat(currency);
   const targetDiff = targetBalance - cleared;
 
   const clearedBalance = format(cleared, 'financial');
@@ -139,7 +143,7 @@ export function ReconcileMenu({
     query: balanceQuery.query.filter({ cleared: true }),
   });
   const lastSyncedBalance = account.balance_current;
-  const format = useFormat();
+  const format = useFormat(useForeignCurrencyOf(account));
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const locale = useLocale();
 

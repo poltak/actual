@@ -1,8 +1,9 @@
 // @ts-strict-ignore
 // TODO: remove strict
-import { useCallback, useLayoutEffect, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useTranslation } from 'react-i18next';
 
 import { theme } from '@actual-app/components/theme';
 import { send } from '@actual-app/core/platform/client/connection';
@@ -28,6 +29,7 @@ import type {
 
 import { FeatureErrorFallback } from '#components/FeatureErrorFallback';
 import type { TableHandleRef } from '#components/table';
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { isValidBoundaryDrop } from '#hooks/useDragDrop';
 import type { DropPosition } from '#hooks/useDragDrop';
 import { useNavigate } from '#hooks/useNavigate';
@@ -35,8 +37,15 @@ import { useSyncedPref } from '#hooks/useSyncedPref';
 import { pushModal } from '#modals/modalsSlice';
 import { addNotification } from '#notifications/notificationsSlice';
 import { useDispatch } from '#redux';
+import {
+  fromView,
+  getRateRequests,
+  toDbDiff,
+  toView,
+} from '#transactions/accountCurrencyView';
 
 import { applyRulesToTransaction } from './applyRulesToTransaction';
+import { TableCurrencyProvider } from './table/TableCurrencyContext';
 import type { ClearedFieldsByTransaction } from './table/utils';
 import { TransactionTable } from './TransactionsTable';
 import type { TransactionTableProps } from './TransactionsTable';
@@ -186,18 +195,87 @@ export function TransactionList({
   const [learnCategories = 'true'] = useSyncedPref('learn-categories');
   const isLearnCategoriesEnabled = String(learnCategories) === 'true';
 
+  // On the page of a foreign currency account, the rows are in the view
+  // form: `amount` holds the amount in the currency of the account. See
+  // `accountCurrencyView`. All other pages work as before.
+  const { t } = useTranslation();
+  const { baseCurrency, foreignCurrencyOf } = useAccountCurrencies();
+  const pageCurrency = foreignCurrencyOf(account?.id);
+  const hasViewRows = pageCurrency != null;
+  transactions = useMemo(
+    () => (hasViewRows ? transactions.map(toView) : transactions),
+    [hasViewRows, transactions],
+  );
+  allTransactions = useMemo(
+    () => (hasViewRows ? allTransactions.map(toView) : allTransactions),
+    [hasViewRows, allTransactions],
+  );
+
   const transactionsLatest = useRef<readonly TransactionEntity[]>([]);
   useLayoutEffect(() => {
     transactionsLatest.current = transactions;
   }, [transactions]);
 
+  // Gets the exchange rates that a save needs, and maps the rows that
+  // are in the view form. Gives null when a rate is not available: the
+  // save must stop then, because the server cannot convert the amount.
+  const prepareDiff = useCallback(
+    async <T extends Parameters<typeof toDbDiff>[0]['diff']>(
+      diff: T,
+    ): Promise<T | null> => {
+      const stored = (id: string | undefined) =>
+        transactionsLatest.current.find(row => row.id === id);
+      const accountOf = (id: string | undefined) => stored(id)?.account;
+
+      const requests = getRateRequests({
+        added: diff.added,
+        updated: diff.updated,
+        dateOf: id => stored(id)?.date,
+        accountOf,
+        payees,
+        foreignCurrencyOf,
+        baseCurrency,
+      });
+      if (requests.length > 0) {
+        const { missing } = await send('rates-ensure', { requests });
+        if (missing.length > 0) {
+          const { from, date } = missing[0];
+          dispatch(
+            addNotification({
+              notification: {
+                type: 'error',
+                message: t(
+                  'No exchange rate for {{currency}} on {{date}} is available, so the transaction was not saved. Turn on "Download exchange rates" in the settings.',
+                  { currency: from, date },
+                ),
+              },
+            }),
+          );
+          return null;
+        }
+      }
+
+      return toDbDiff({
+        diff,
+        // A new row is in the view form on each page. A stored row is in
+        // the view form only on the page of its account.
+        isInViewForm: account => foreignCurrencyOf(account) != null,
+        accountOf,
+      });
+    },
+    [baseCurrency, dispatch, foreignCurrencyOf, payees, t],
+  );
+
   const onAdd = useCallback(
     async (newTransactions: TransactionEntity[]) => {
       newTransactions = realizeTempTransactions(newTransactions);
-      await saveDiff({ added: newTransactions }, isLearnCategoriesEnabled);
+      const diff = await prepareDiff({ added: newTransactions });
+      if (diff) {
+        await saveDiff(diff, isLearnCategoriesEnabled);
+      }
       onRefetch();
     },
-    [isLearnCategoriesEnabled, onRefetch],
+    [isLearnCategoriesEnabled, onRefetch, prepareDiff],
   );
 
   const onSave = useCallback(
@@ -213,7 +291,21 @@ export function TransactionList({
           const dateChanged = !!changes.diff.updated[0].date;
           if (dateChanged) {
             changes.diff.updated[0].sort_order = Date.now();
-            await saveDiff(changes.diff, isLearnCategoriesEnabled);
+          }
+          if (dateChanged || hasViewRows) {
+            // The server gives a row of a foreign currency account its
+            // value in the currency of the budget, so the page loads the
+            // rows again after the save
+            if (!dateChanged) {
+              onChange(
+                fromView(changes.newTransaction),
+                changes.data.map(fromView),
+              );
+            }
+            const diff = await prepareDiff(changes.diff);
+            if (diff) {
+              await saveDiff(diff, isLearnCategoriesEnabled);
+            }
             onRefetch();
           } else {
             onChange(changes.newTransaction, changes.data);
@@ -229,12 +321,29 @@ export function TransactionList({
 
       await saveTransaction();
     },
-    [isLearnCategoriesEnabled, onChange, onRefetch],
+    [isLearnCategoriesEnabled, onChange, onRefetch, hasViewRows, prepareDiff],
+  );
+
+  // A change to the rows of a split, for the page of a foreign currency
+  // account. The rows go to the page state in its own form, and the diff
+  // goes to the server with native amounts.
+  const applyViewChanges = useCallback(
+    (changes: ReturnType<typeof addSplitTransaction>) => {
+      onChange(fromView(changes.newTransaction), changes.data.map(fromView));
+      void prepareDiff(changes.diff).then(diff =>
+        diff ? saveDiff(diff, isLearnCategoriesEnabled) : null,
+      );
+    },
+    [isLearnCategoriesEnabled, onChange, prepareDiff],
   );
 
   const onAddSplit = useCallback(
     (id: TransactionEntity['id']) => {
       const changes = addSplitTransaction(transactionsLatest.current, id);
+      if (hasViewRows) {
+        applyViewChanges(changes);
+        return changes.diff.added[0].id;
+      }
       onChange(changes.newTransaction, changes.data);
       void saveDiffAndApply(
         changes.diff,
@@ -244,7 +353,7 @@ export function TransactionList({
       );
       return changes.diff.added[0].id;
     },
-    [isLearnCategoriesEnabled, onChange],
+    [isLearnCategoriesEnabled, onChange, hasViewRows, applyViewChanges],
   );
 
   const onSplit = useCallback(
@@ -254,6 +363,10 @@ export function TransactionList({
         id,
         makeEmptySplitSubtransactions,
       );
+      if (hasViewRows) {
+        applyViewChanges(changes);
+        return changes.diff.added[0].id;
+      }
       onChange(changes.newTransaction, changes.data);
       void saveDiffAndApply(
         changes.diff,
@@ -263,7 +376,7 @@ export function TransactionList({
       );
       return changes.diff.added[0].id;
     },
-    [isLearnCategoriesEnabled, onChange],
+    [isLearnCategoriesEnabled, onChange, hasViewRows, applyViewChanges],
   );
 
   const onApplyRules = useCallback(
@@ -504,6 +617,10 @@ export function TransactionList({
 
   return (
     <ErrorBoundary FallbackComponent={FeatureErrorFallback}>
+      <TableCurrencyProvider
+        pageCurrency={pageCurrency}
+        foreignCurrencyOf={foreignCurrencyOf}
+      >
       <TransactionTable
         ref={tableRef}
         transactions={allTransactions}
@@ -556,6 +673,7 @@ export function TransactionList({
         showSelection={showSelection}
         allowSplitTransaction={allowSplitTransaction}
       />
+      </TableCurrencyProvider>
     </ErrorBoundary>
   );
 }

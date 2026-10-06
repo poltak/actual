@@ -132,6 +132,20 @@ describe('resolveRowAmounts in a foreign currency account', () => {
     ).toEqual({ ok: false, reason: 'missing-native-amount' });
   });
 
+  it('reads a new row with no amount at all as zero', () => {
+    expect(
+      resolveUsd({
+        existing: null,
+        change: { account: 'wise-usd', date: '2026-10-01' },
+      }),
+    ).toEqual({
+      ok: true,
+      amount: 0,
+      native_amount: 0,
+      amount_locked: false,
+    });
+  });
+
   it('reads a lone amount as native for a caller that knows no currencies', () => {
     expect(
       resolveUsd({

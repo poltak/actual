@@ -1,14 +1,19 @@
 import { logger } from '#platform/server/log';
 import { createApp } from '#server/app';
 import * as db from '#server/db';
+import { mutator } from '#server/mutators';
 import * as prefs from '#server/prefs';
+import { undoable } from '#server/undo';
 
+import { getAccountMarketValue, revalueAccount } from './market-value';
 import { ensureRates, getStoredRate, refreshRatesOfToday } from './rates';
 import type { RateRequest, StoredRate } from './rates';
 
 export type CurrenciesHandlers = {
   'rates-ensure': typeof ensureRatesForClient;
   'rate-get': typeof getRate;
+  'account-market-value': typeof getAccountMarketValue;
+  'account-revalue': typeof revalueAccount;
 };
 
 export const app = createApp<CurrenciesHandlers>();
@@ -18,6 +23,8 @@ export const app = createApp<CurrenciesHandlers>();
 // wait for the network.
 app.method('rates-ensure', ensureRatesForClient);
 app.method('rate-get', getRate);
+app.method('account-market-value', getAccountMarketValue);
+app.method('account-revalue', mutator(undoable(revalueAccount)));
 
 async function ensureRatesForClient({
   requests,

@@ -77,6 +77,11 @@ app.events.on('sync', ({ type }) => {
   }
 
   refreshRatesOfToday().catch(error => {
+    if (!db.getDatabase()) {
+      // The budget was closed while the refresh ran. The next sync of an
+      // open budget does it again.
+      return;
+    }
     logger.warn('Could not refresh the exchange rates of today', error);
   });
 });

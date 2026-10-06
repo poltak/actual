@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as asyncStorage from '#platform/server/asyncStorage';
 import { logger } from '#platform/server/log';
 import { aqlQuery } from '#server/aql';
+import { planCurrencyWrites } from '#server/currencies/plan';
 import * as db from '#server/db';
 import { TRANSACTION_SORT_INCREMENT } from '#server/db/sort';
 import { TransactionError } from '#server/errors';
@@ -888,7 +889,7 @@ export async function matchTransactions(
           WHERE
             -- If both ids are set, and we didn't match earlier then skip dedup
             (imported_id IS NULL OR ? IS NULL)
-            AND date >= ? AND date <= ? AND amount = ?
+            AND date >= ? AND date <= ? AND native_amount = ?
             AND account = ?`,
           [
             trans.imported_id || null,
@@ -917,7 +918,7 @@ export async function matchTransactions(
         >(
           `SELECT id, is_parent, date, imported_id, payee, imported_payee, category, notes, reconciled, cleared, amount
           FROM v_transactions
-          WHERE date >= ? AND date <= ? AND amount = ? AND account = ?`,
+          WHERE date >= ? AND date <= ? AND native_amount = ? AND account = ?`,
           [sevenDaysBefore, sevenDaysAfter, trans.amount || 0, acctId],
         );
       }
@@ -1055,9 +1056,15 @@ export async function addTransactions(
     });
     newTransactions = res.added.map(t => t.id);
   } else {
+    // This path skips the transfer and rule work of a normal write, but
+    // a row in a foreign currency account still needs its two amounts
+    const { added: resolved } = await planCurrencyWrites({
+      added,
+      amountSemantics: 'native',
+    });
     await batchMessages(async () => {
       newTransactions = await Promise.all(
-        added.map(async trans => db.insertTransaction(trans)),
+        resolved.map(async trans => db.insertTransaction(trans)),
       );
     });
   }
@@ -1154,15 +1161,24 @@ async function processBankSyncDownload(
     const payee = await getStartingBalancePayee();
 
     return runMutator(async () => {
-      const initialId = await db.insertTransaction({
-        account: id,
-        amount: balanceToUse,
-        category: acctRow.offbudget === 0 ? payee.category : null,
-        payee: payee.id,
-        date: startingBalanceDate,
-        cleared: true,
-        starting_balance_flag: true,
+      // The balance from the bank is in the currency of the account
+      const {
+        added: [startingBalance],
+      } = await planCurrencyWrites({
+        added: [
+          {
+            account: id,
+            amount: balanceToUse,
+            category: acctRow.offbudget === 0 ? payee.category : null,
+            payee: payee.id,
+            date: startingBalanceDate,
+            cleared: true,
+            starting_balance_flag: true,
+          },
+        ],
+        amountSemantics: 'native',
       });
+      const initialId = await db.insertTransaction(startingBalance);
 
       const result = await reconcileTransactions(id, transactions, {
         isBankSyncAccount: true,

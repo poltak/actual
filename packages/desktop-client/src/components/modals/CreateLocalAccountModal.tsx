@@ -9,9 +9,13 @@ import { FormError } from '@actual-app/components/form-error';
 import { InitialFocus } from '@actual-app/components/initial-focus';
 import { InlineField } from '@actual-app/components/inline-field';
 import { Input } from '@actual-app/components/input';
+import { Select } from '@actual-app/components/select';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
+import { send } from '@actual-app/core/platform/client/connection';
+import { isForeignCurrency } from '@actual-app/core/shared/currencies';
+import { currentDay } from '@actual-app/core/shared/months';
 import { toRelaxedNumber } from '@actual-app/core/shared/util';
 
 import { useCreateAccountMutation } from '#accounts';
@@ -24,9 +28,12 @@ import {
   ModalTitle,
 } from '#components/common/Modal';
 import { Checkbox } from '#components/forms';
+import { useCurrencyOptions } from '#components/settings/Currency';
 import { validateAccountName } from '#components/util/accountValidation';
 import { useAccounts } from '#hooks/useAccounts';
+import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useNavigate } from '#hooks/useNavigate';
+import { useSyncedPref } from '#hooks/useSyncedPref';
 import { useSyncServerStatus } from '#hooks/useSyncServerStatus';
 import { closeModal } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
@@ -43,6 +50,15 @@ export function CreateLocalAccountModal() {
 
   const [nameError, setNameError] = useState(null);
   const [balanceError, setBalanceError] = useState(false);
+
+  // An account can have its own currency when the budget has one
+  const isMultiCurrencyEnabled = useFeatureFlag('multiCurrency');
+  const [defaultCurrencyCode] = useSyncedPref('defaultCurrencyCode');
+  const baseCurrency = defaultCurrencyCode || '';
+  const showCurrency = isMultiCurrencyEnabled && baseCurrency !== '';
+  const currencyOptions = useCurrencyOptions().filter(([code]) => code !== '');
+  const [currency, setCurrency] = useState(baseCurrency);
+  const [hasRateError, setHasRateError] = useState(false);
 
   const validateBalance = balance => !isNaN(parseFloat(balance));
 
@@ -67,11 +83,29 @@ export function CreateLocalAccountModal() {
     setBalanceError(balanceError);
 
     if (!nameError && !balanceError) {
+      const isForeign =
+        showCurrency && isForeignCurrency({ currency, baseCurrency });
+      const startingBalance = toRelaxedNumber(balance);
+
+      // The starting balance gets a value in the currency of the budget,
+      // and that needs the rate of today
+      setHasRateError(false);
+      if (isForeign && startingBalance !== 0) {
+        const { missing } = await send('rates-ensure', {
+          requests: [{ from: currency, to: baseCurrency, date: currentDay() }],
+        });
+        if (missing.length > 0) {
+          setHasRateError(true);
+          return;
+        }
+      }
+
       createAccount.mutate(
         {
           name,
-          balance: toRelaxedNumber(balance),
+          balance: startingBalance,
           offBudget: offbudget,
+          ...(isForeign && { currency }),
         },
         {
           onSuccess: id => {
@@ -202,6 +236,37 @@ export function CreateLocalAccountModal() {
                 </View>
               </View>
 
+              {showCurrency && (
+                <>
+                  <InlineField label={t('Currency')} width="100%">
+                    <Select
+                      value={currency}
+                      onChange={code => {
+                        setCurrency(code);
+                        setHasRateError(false);
+                      }}
+                      options={currencyOptions}
+                      style={{ flex: 1 }}
+                    />
+                  </InlineField>
+                  <div
+                    style={{
+                      textAlign: 'right',
+                      fontSize: '0.7em',
+                      color: theme.pageTextLight,
+                      marginBottom: 3,
+                    }}
+                  >
+                    <Text style={{ display: 'block' }}>
+                      <Trans>
+                        The balance and the transactions of this account are in
+                        this currency. This cannot be changed later.
+                      </Trans>
+                    </Text>
+                  </div>
+                </>
+              )}
+
               <InlineField label={t('Balance')} width="100%">
                 <Input
                   name="balance"
@@ -221,6 +286,15 @@ export function CreateLocalAccountModal() {
               {balanceError && (
                 <FormError style={{ marginLeft: 75 }}>
                   <Trans>Balance must be a number</Trans>
+                </FormError>
+              )}
+              {hasRateError && (
+                <FormError style={{ marginLeft: 75 }}>
+                  <Trans>
+                    No exchange rate for today is available for this currency.
+                    Turn on &quot;Download exchange rates&quot; in the settings,
+                    or use a balance of 0.
+                  </Trans>
                 </FormError>
               )}
 

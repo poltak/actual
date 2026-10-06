@@ -3,6 +3,7 @@ import { logger } from '#platform/server/log';
 import * as db from '#server/db';
 import { runMutator } from '#server/mutators';
 import { batchMessages } from '#server/sync';
+import { FRANKFURTER_PROVIDER } from '#shared/currencies';
 import * as monthUtils from '#shared/months';
 import type { ExchangeRateSource } from '#types/models';
 
@@ -10,9 +11,7 @@ import { getBaseCurrency, isForeignCurrency } from './base-currency';
 
 const FRANKFURTER_URL = 'https://api.frankfurter.dev/v2/rates';
 
-// The value of the synced preference `exchangeRateProvider` that turns
-// the download on
-export const FRANKFURTER_PROVIDER = 'frankfurter';
+export { FRANKFURTER_PROVIDER };
 
 // A write uses a stored rate that is at most this number of days from
 // its date

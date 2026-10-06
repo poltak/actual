@@ -60,6 +60,8 @@ type CreateAccountPayload = {
   name: string;
   balance: number;
   offBudget: boolean;
+  // Only for an account that is not in the currency of the budget
+  currency?: string;
 };
 
 export function useCreateAccountMutation() {
@@ -68,11 +70,17 @@ export function useCreateAccountMutation() {
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: async ({ name, balance, offBudget }: CreateAccountPayload) => {
+    mutationFn: async ({
+      name,
+      balance,
+      offBudget,
+      currency,
+    }: CreateAccountPayload) => {
       const id = await send('account-create', {
         name,
         balance,
         offBudget,
+        currency,
       });
       return id;
     },

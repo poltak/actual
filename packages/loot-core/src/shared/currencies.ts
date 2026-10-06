@@ -80,6 +80,10 @@ export const currencies: Currency[] = [
   { code: 'ZAR', name: 'South African Rand', symbol: 'R', decimalPlaces: 2, numberFormat: 'space-comma', symbolFirst: true },
 ];
 
+// The value of the preference `exchangeRateProvider` that turns on the
+// download of exchange rates from api.frankfurter.dev
+export const FRANKFURTER_PROVIDER = 'frankfurter';
+
 export function getCurrency(code: string): Currency {
   return currencies.find(c => c.code === code) || currencies[0];
 }

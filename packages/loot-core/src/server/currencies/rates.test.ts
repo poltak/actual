@@ -1,4 +1,3 @@
-import { fetch } from '#platform/server/fetch';
 import * as db from '#server/db';
 
 import {
@@ -11,22 +10,18 @@ import {
   resetRefreshTimer,
   saveRates,
 } from './rates';
+import type { FetchRates, RateRow } from './rates';
 
-vi.mock('#platform/server/fetch', () => ({
-  fetch: vi.fn(),
-}));
-
-const mockedFetch = vi.mocked(fetch);
+// No test here uses the network. Each one gives its own function for
+// the HTTP call or for the download.
+const fetchImpl = vi.fn<typeof fetch>();
+const fetchRates = vi.fn<FetchRates>();
 
 // The tests run with a fixed clock. `currentDay()` is 2017-01-01.
 const TODAY = '2017-01-01';
 
-function frankfurterAnswer(rows: Array<{ date: string; rate: number }>) {
-  return {
-    ok: true,
-    status: 200,
-    json: async () => rows.map(row => ({ ...row, base: 'USD', quote: 'VND' })),
-  } as Response;
+function usdRates(rows: Array<{ date: string; rate: number }>): RateRow[] {
+  return rows.map(row => ({ ...row, from: 'USD', to: 'VND' }));
 }
 
 async function turnDownloadOn() {
@@ -45,7 +40,8 @@ async function storedRateCount() {
 
 beforeEach(global.emptyDatabase());
 beforeEach(() => {
-  mockedFetch.mockReset();
+  fetchImpl.mockReset();
+  fetchRates.mockReset();
   resetRefreshTimer();
 });
 
@@ -161,23 +157,33 @@ describe('saveRates', () => {
 });
 
 describe('fetchFrankfurterRates', () => {
+  function answer(body: unknown, status = 200) {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+    } as Response;
+  }
+
+  const range = {
+    from: 'USD',
+    to: 'VND',
+    start: '2016-12-09',
+    end: '2016-12-10',
+  };
+
   it('asks for one pair and a range, and follows a redirect', async () => {
-    mockedFetch.mockResolvedValue(
-      frankfurterAnswer([
-        { date: '2016-12-09', rate: 22700 },
-        { date: '2016-12-10', rate: 22750 },
+    fetchImpl.mockResolvedValue(
+      answer([
+        { date: '2016-12-09', base: 'USD', quote: 'VND', rate: 22700 },
+        { date: '2016-12-10', base: 'USD', quote: 'VND', rate: 22750 },
       ]),
     );
 
-    const rates = await fetchFrankfurterRates({
-      from: 'USD',
-      to: 'VND',
-      start: '2016-12-09',
-      end: '2016-12-10',
-    });
+    const rates = await fetchFrankfurterRates({ ...range, fetchImpl });
 
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
-    const [url, options] = mockedFetch.mock.calls[0];
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchImpl.mock.calls[0];
     expect(String(url)).toBe(
       'https://api.frankfurter.dev/v2/rates?base=USD&quotes=VND&from=2016-12-09&to=2016-12-10',
     );
@@ -189,52 +195,31 @@ describe('fetchFrankfurterRates', () => {
   });
 
   it('drops rows that are not a rate of the pair', async () => {
-    mockedFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => [
+    fetchImpl.mockResolvedValue(
+      answer([
         { date: '2016-12-09', base: 'USD', quote: 'VND', rate: 22700 },
         { date: '2016-12-09', base: 'USD', quote: 'EUR', rate: 0.94 },
         { date: '2016-12-10', base: 'USD', quote: 'VND', rate: 0 },
         { date: '10 Dec 2016', base: 'USD', quote: 'VND', rate: 22750 },
         { date: '2016-12-11', base: 'USD', quote: 'VND', rate: '22800' },
         null,
-      ],
-    } as Response);
+      ]),
+    );
 
-    expect(
-      await fetchFrankfurterRates({
-        from: 'USD',
-        to: 'VND',
-        start: '2016-12-09',
-        end: '2016-12-11',
-      }),
-    ).toEqual([{ from: 'USD', to: 'VND', date: '2016-12-09', rate: 22700 }]);
+    expect(await fetchFrankfurterRates({ ...range, fetchImpl })).toEqual([
+      { from: 'USD', to: 'VND', date: '2016-12-09', rate: 22700 },
+    ]);
   });
 
   it('fails on an error status and on an answer that is not a list', async () => {
-    mockedFetch.mockResolvedValue({ ok: false, status: 503 } as Response);
+    fetchImpl.mockResolvedValue(answer(null, 503));
     await expect(
-      fetchFrankfurterRates({
-        from: 'USD',
-        to: 'VND',
-        start: '2016-12-09',
-        end: '2016-12-09',
-      }),
+      fetchFrankfurterRates({ ...range, fetchImpl }),
     ).rejects.toThrow('status 503');
 
-    mockedFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ message: 'not found' }),
-    } as Response);
+    fetchImpl.mockResolvedValue(answer({ message: 'not found' }));
     await expect(
-      fetchFrankfurterRates({
-        from: 'USD',
-        to: 'VND',
-        start: '2016-12-09',
-        end: '2016-12-09',
-      }),
+      fetchFrankfurterRates({ ...range, fetchImpl }),
     ).rejects.toThrow('not a list');
   });
 });
@@ -243,16 +228,16 @@ describe('ensureRates', () => {
   it('does not download while the user did not turn the download on', async () => {
     const request = { from: 'USD', to: 'VND', date: '2016-12-10' };
 
-    expect(await ensureRates({ requests: [request] })).toEqual({
+    expect(await ensureRates({ requests: [request], fetchRates })).toEqual({
       missing: [request],
     });
-    expect(mockedFetch).not.toHaveBeenCalled();
+    expect(fetchRates).not.toHaveBeenCalled();
   });
 
   it('downloads one range for a pair and stores only the dates that were asked for', async () => {
     await turnDownloadOn();
-    mockedFetch.mockResolvedValue(
-      frankfurterAnswer([
+    fetchRates.mockResolvedValue(
+      usdRates([
         { date: '2016-12-05', rate: 22600 },
         { date: '2016-12-06', rate: 22620 },
         { date: '2016-12-07', rate: 22640 },
@@ -267,13 +252,17 @@ describe('ensureRates', () => {
         { from: 'USD', to: 'VND', date: '2016-12-05' },
         { from: 'VND', to: 'VND', date: '2016-12-05' },
       ],
+      fetchRates,
     });
 
     expect(result).toEqual({ missing: [] });
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(String(mockedFetch.mock.calls[0][0])).toContain(
-      'from=2016-12-05&to=2016-12-08',
-    );
+    expect(fetchRates).toHaveBeenCalledTimes(1);
+    expect(fetchRates).toHaveBeenCalledWith({
+      from: 'USD',
+      to: 'VND',
+      start: '2016-12-05',
+      end: '2016-12-08',
+    });
     expect(await storedRateCount()).toBe(2);
     expect(
       await getStoredRate({
@@ -290,8 +279,10 @@ describe('ensureRates', () => {
     const request = { from: 'USD', to: 'VND', date: '2016-12-10' };
     await saveRates({ rates: [{ ...request, rate: 22755 }], source: 'manual' });
 
-    expect(await ensureRates({ requests: [request] })).toEqual({ missing: [] });
-    expect(mockedFetch).not.toHaveBeenCalled();
+    expect(await ensureRates({ requests: [request], fetchRates })).toEqual({
+      missing: [],
+    });
+    expect(fetchRates).not.toHaveBeenCalled();
     expect(await getStoredRate(request)).toMatchObject({
       rate: 22755,
       source: 'manual',
@@ -300,17 +291,17 @@ describe('ensureRates', () => {
 
   it('reports a request with no usable rate when the download fails', async () => {
     await turnDownloadOn();
-    mockedFetch.mockRejectedValue(new Error('offline'));
+    fetchRates.mockRejectedValue(new Error('offline'));
     const request = { from: 'USD', to: 'VND', date: '2016-12-10' };
 
-    expect(await ensureRates({ requests: [request] })).toEqual({
+    expect(await ensureRates({ requests: [request], fetchRates })).toEqual({
       missing: [request],
     });
   });
 
   it('accepts the nearest stored rate when the download fails', async () => {
     await turnDownloadOn();
-    mockedFetch.mockRejectedValue(new Error('offline'));
+    fetchRates.mockRejectedValue(new Error('offline'));
     await saveRates({
       rates: [{ from: 'USD', to: 'VND', date: '2016-12-08', rate: 22700 }],
       source: 'frankfurter',
@@ -319,21 +310,25 @@ describe('ensureRates', () => {
     expect(
       await ensureRates({
         requests: [{ from: 'USD', to: 'VND', date: '2016-12-10' }],
+        fetchRates,
       }),
     ).toEqual({ missing: [] });
   });
 
   it('asks for today when the date is after today', async () => {
     await turnDownloadOn();
-    mockedFetch.mockResolvedValue(
-      frankfurterAnswer([{ date: TODAY, rate: 22790 }]),
-    );
+    fetchRates.mockResolvedValue(usdRates([{ date: TODAY, rate: 22790 }]));
 
     const request = { from: 'USD', to: 'VND', date: '2017-03-01' };
-    expect(await ensureRates({ requests: [request] })).toEqual({ missing: [] });
-    expect(String(mockedFetch.mock.calls[0][0])).toContain(
-      `from=${TODAY}&to=${TODAY}`,
-    );
+    expect(await ensureRates({ requests: [request], fetchRates })).toEqual({
+      missing: [],
+    });
+    expect(fetchRates).toHaveBeenCalledWith({
+      from: 'USD',
+      to: 'VND',
+      start: TODAY,
+      end: TODAY,
+    });
   });
 });
 
@@ -348,16 +343,17 @@ describe('refreshRatesOfToday', () => {
     await addAccount('cash', null);
     await addAccount('bank', 'VND');
     await addAccount('wise-usd', 'USD');
-    mockedFetch.mockResolvedValue(
-      frankfurterAnswer([{ date: TODAY, rate: 22790 }]),
-    );
+    fetchRates.mockResolvedValue(usdRates([{ date: TODAY, rate: 22790 }]));
 
-    await refreshRatesOfToday();
+    await refreshRatesOfToday({ fetchRates });
 
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(String(mockedFetch.mock.calls[0][0])).toContain(
-      `base=USD&quotes=VND&from=${TODAY}&to=${TODAY}`,
-    );
+    expect(fetchRates).toHaveBeenCalledTimes(1);
+    expect(fetchRates).toHaveBeenCalledWith({
+      from: 'USD',
+      to: 'VND',
+      start: TODAY,
+      end: TODAY,
+    });
     expect(
       await getStoredRate({ from: 'USD', to: 'VND', date: TODAY, maxDays: 0 }),
     ).toMatchObject({ rate: 22790 });
@@ -367,23 +363,23 @@ describe('refreshRatesOfToday', () => {
     await turnDownloadOn();
     await addAccount('wise-usd', 'USD');
 
-    await refreshRatesOfToday();
+    await refreshRatesOfToday({ fetchRates });
 
-    expect(mockedFetch).not.toHaveBeenCalled();
+    expect(fetchRates).not.toHaveBeenCalled();
   });
 
   it('waits some minutes after a failed try', async () => {
     await turnDownloadOn();
     await db.update('preferences', { id: 'defaultCurrencyCode', value: 'VND' });
     await addAccount('wise-usd', 'USD');
-    mockedFetch.mockRejectedValue(new Error('offline'));
+    fetchRates.mockRejectedValue(new Error('offline'));
 
     const start = 1_000_000_000;
-    await refreshRatesOfToday({ now: start });
-    await refreshRatesOfToday({ now: start + 60 * 1000 });
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    await refreshRatesOfToday({ now: start, fetchRates });
+    await refreshRatesOfToday({ now: start + 60 * 1000, fetchRates });
+    expect(fetchRates).toHaveBeenCalledTimes(1);
 
-    await refreshRatesOfToday({ now: start + 11 * 60 * 1000 });
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    await refreshRatesOfToday({ now: start + 11 * 60 * 1000, fetchRates });
+    expect(fetchRates).toHaveBeenCalledTimes(2);
   });
 });

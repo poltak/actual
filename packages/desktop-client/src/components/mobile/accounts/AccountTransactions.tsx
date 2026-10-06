@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
 import { send } from '@actual-app/core/platform/client/connection';
+import { currentDay } from '@actual-app/core/shared/months';
 import type { Query } from '@actual-app/core/shared/query';
 import { isPreviewId } from '@actual-app/core/shared/transactions';
 import type { IntegerAmount } from '@actual-app/core/shared/util';
@@ -25,6 +26,8 @@ import { markAccountRead } from '#accounts/accountsSlice';
 import * as reconciliation from '#accounts/reconciliation';
 import { ReconcilingBanner } from '#components/mobile/accounts/ReconcilingBanner';
 import { TransactionListWithBalances } from '#components/mobile/transactions/TransactionListWithBalances';
+import { TableCurrencyProvider } from '#components/transactions/table/TableCurrencyContext';
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { useAccountPreviewTransactions } from '#hooks/useAccountPreviewTransactions';
 import { SchedulesProvider } from '#hooks/useCachedSchedules';
 import { useDateFormat } from '#hooks/useDateFormat';
@@ -42,6 +45,8 @@ import { collapseModals, pushModal } from '#modals/modalsSlice';
 import * as queries from '#queries';
 import { useDispatch } from '#redux';
 import * as bindings from '#spreadsheet/bindings';
+import { toView } from '#transactions/accountCurrencyView';
+import { ensureAccountRatesOrNotify } from '#transactions/exchangeRates';
 
 export function AccountTransactions({
   account,
@@ -97,10 +102,16 @@ function TransactionListWithPreviews({
     baseTransactionsQuery(),
   );
 
+  // The page of a foreign currency account shows the amounts in the
+  // currency of the account
+  const { foreignCurrencyOf } = useAccountCurrencies();
+  const pageCurrency = foreignCurrencyOf(account.id);
+
   const { isSearching, search } = useTransactionsSearch({
     updateQuery: setTransactionsQuery,
     resetQuery: () => setTransactionsQuery(baseTransactionsQuery()),
     dateFormat,
+    foreignCurrency: pageCurrency,
   });
 
   const searchTextRef = useRef('');
@@ -142,7 +153,9 @@ function TransactionListWithPreviews({
     query: transactionsQuery,
     options: {
       calculateRunningBalances: shouldCalculateRunningBalances
-        ? calculateRunningBalancesTopDown
+        ? pageCurrency
+          ? calculateNativeRunningBalances
+          : calculateRunningBalancesTopDown
         : shouldCalculateRunningBalances,
       startingBalance: accountBalanceValue || 0,
     },
@@ -254,12 +267,23 @@ function TransactionListWithPreviews({
 
   const onCreateReconciliationTransaction = useCallback(
     async (targetDiff: number) => {
+      // The adjustment of a foreign currency account gets a value in
+      // the currency of the budget, and that needs the rate of today
+      const hasRates = await ensureAccountRatesOrNotify({
+        accountId: account.id,
+        dates: [currentDay()],
+        dispatch,
+      });
+      if (!hasRates) {
+        return;
+      }
+
       await reconciliation.createReconciliationTransaction(
         account.id,
         targetDiff,
       );
     },
-    [account.id],
+    [account.id, dispatch],
   );
 
   const onToggleTransactionCleared = useCallback(
@@ -300,13 +324,23 @@ function TransactionListWithPreviews({
 
   const previewTransactionsToDisplay = isReconciling ? [] : previewTransactions;
 
-  const transactionsToDisplay = !isSearching
+  const storedTransactionsToDisplay = !isSearching
     ? // Do not render child transactions in the list, unless searching
       previewTransactionsToDisplay.concat(transactions.filter(t => !t.is_child))
     : transactions;
+  const transactionsToDisplay = useMemo(
+    () =>
+      pageCurrency
+        ? storedTransactionsToDisplay.map(toView)
+        : storedTransactionsToDisplay,
+    [pageCurrency, storedTransactionsToDisplay],
+  );
 
   return (
-    <>
+    <TableCurrencyProvider
+      pageCurrency={pageCurrency}
+      foreignCurrencyOf={foreignCurrencyOf}
+    >
       {isReconciling && (
         <ReconcilingBanner
           account={account}
@@ -338,6 +372,19 @@ function TransactionListWithPreviews({
         isReconciling={isReconciling}
         onToggleTransactionCleared={onToggleTransactionCleared}
       />
-    </>
+    </TableCurrencyProvider>
   );
 }
+
+// The running balance of a foreign currency account adds the amounts in
+// the currency of the account
+const calculateNativeRunningBalances: typeof calculateRunningBalancesTopDown = (
+  transactions,
+  splits,
+  startingBalance,
+) =>
+  calculateRunningBalancesTopDown(
+    transactions.map(toView),
+    splits,
+    startingBalance,
+  );

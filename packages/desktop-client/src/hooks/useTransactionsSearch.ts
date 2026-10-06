@@ -11,6 +11,9 @@ type UseTransactionsSearchProps = {
   resetQuery: () => void;
   dateFormat: string;
   delayMs?: number;
+  // The currency of the account of the page when it is not the currency
+  // of the budget. A number in the search text is then in that currency.
+  foreignCurrency?: string | null;
 };
 type UseTransactionsSearchResult = {
   isSearching: boolean;
@@ -22,6 +25,7 @@ export function useTransactionsSearch({
   resetQuery,
   dateFormat,
   delayMs = 150,
+  foreignCurrency = null,
 }: UseTransactionsSearchProps): UseTransactionsSearchResult {
   const [isSearching, setIsSearching] = useState(false);
   const currencySymbol = useFormat().currency.symbol;
@@ -46,12 +50,20 @@ export function useTransactionsSearch({
               searchText,
               dateFormat,
               currencySymbol,
+              foreignCurrency,
             ),
           );
           setIsSearching(true);
         }
       }, delayMs),
-    [currencySymbol, dateFormat, delayMs, resetQueryRef, updateQueryRef],
+    [
+      currencySymbol,
+      dateFormat,
+      delayMs,
+      foreignCurrency,
+      resetQueryRef,
+      updateQueryRef,
+    ],
   );
 
   useEffect(() => {

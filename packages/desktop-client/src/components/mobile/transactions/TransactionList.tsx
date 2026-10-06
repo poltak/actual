@@ -40,6 +40,7 @@ import type {
 } from '@actual-app/core/types/models';
 
 import { FloatingActionBar } from '#components/mobile/FloatingActionBar';
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { useAccounts } from '#hooks/useAccounts';
 import { useCategoriesById } from '#hooks/useCategories';
 import { useLocale } from '#hooks/useLocale';
@@ -288,6 +289,7 @@ function SelectedTransactionsFloatingActionBar({
   showMakeTransfer,
 }: SelectedTransactionsFloatingActionBarProps) {
   const { t } = useTranslation();
+  const { foreignCurrencyOf } = useAccountCurrencies();
   const editMenuTriggerRef = useRef(null);
   const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
   const moreOptionsMenuTriggerRef = useRef(null);
@@ -386,8 +388,11 @@ function SelectedTransactionsFloatingActionBar({
       return false;
     }
     const [fromTrans, toTrans] = twoTransactions;
-    return validForTransfer(fromTrans, toTrans);
-  }, [twoTransactions]);
+    return validForTransfer(fromTrans, toTrans, {
+      fromCurrency: foreignCurrencyOf(fromTrans.account),
+      toCurrency: foreignCurrencyOf(toTrans.account),
+    });
+  }, [twoTransactions, foreignCurrencyOf]);
 
   const canMerge = useMemo(() => {
     return Boolean(

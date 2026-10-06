@@ -10,6 +10,7 @@ import { View } from '@actual-app/components/view';
 import type { AccountEntity } from '@actual-app/core/types/models';
 import type { TransObjectLiteral } from '@actual-app/core/types/util';
 
+import { useForeignCurrencyOf } from '#hooks/useAccountCurrencies';
 import { useFormat } from '#hooks/useFormat';
 import { useSheetValue } from '#hooks/useSheetValue';
 import * as bindings from '#spreadsheet/bindings';
@@ -27,7 +28,7 @@ export function ReconcilingBanner({
   onDone,
   onCreateTransaction,
 }: ReconcilingBannerProps) {
-  const format = useFormat();
+  const format = useFormat(useForeignCurrencyOf(account));
   const cleared = useSheetValue<'account', 'balanceCleared'>(
     bindings.accountBalanceCleared(account.id),
   );

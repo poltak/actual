@@ -44,3 +44,21 @@ export function useAccountCurrencies(): AccountCurrencies {
     isPending,
   };
 }
+
+/**
+ * The currency of this account when it is not the currency of the
+ * budget. Null for all other accounts, and for no account.
+ */
+export function useForeignCurrencyOf(
+  account: Pick<AccountEntity, 'currency'> | null | undefined,
+): string | null {
+  const [defaultCurrencyCode] = useSyncedPref('defaultCurrencyCode');
+  const baseCurrency = defaultCurrencyCode || '';
+  const currency = account?.currency;
+
+  return baseCurrency !== '' &&
+    currency &&
+    isForeignCurrency({ currency, baseCurrency })
+    ? currency
+    : null;
+}

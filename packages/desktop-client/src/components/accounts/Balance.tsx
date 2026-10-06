@@ -17,6 +17,7 @@ import { useHover } from 'usehooks-ts';
 import { FinancialText } from '#components/FinancialText';
 import { PrivacyFilter } from '#components/PrivacyFilter';
 import { CellValue, CellValueText } from '#components/spreadsheet/CellValue';
+import { useForeignCurrencyOf } from '#hooks/useAccountCurrencies';
 import { useCachedSchedules } from '#hooks/useCachedSchedules';
 import { useFormat } from '#hooks/useFormat';
 import { useSelectedItems } from '#hooks/useSelected';
@@ -27,14 +28,17 @@ type DetailedBalanceProps = {
   name: string;
   balance: number;
   isExactBalance?: boolean;
+  // The currency of the balance when it is not the currency of the budget
+  currency?: string | null;
 };
 
 function DetailedBalance({
   name,
   balance,
   isExactBalance = true,
+  currency,
 }: DetailedBalanceProps) {
-  const format = useFormat();
+  const format = useFormat(currency);
   return (
     <Text
       style={{
@@ -65,6 +69,9 @@ export function SelectedBalance({
   account,
 }: SelectedBalanceProps) {
   const { t } = useTranslation();
+  // On the page of a foreign currency account, the amounts are in the
+  // currency of that account
+  const currency = useForeignCurrencyOf(account);
 
   const name = `selected-balance-${[...selectedItems].join('-')}`;
 
@@ -85,7 +92,7 @@ export function SelectedBalance({
     query: q('transactions')
       .filter({ id: { $oneof: finalIds } })
       .options({ splits: 'all' })
-      .calculate({ $sum: '$amount' }),
+      .calculate({ $sum: currency ? '$native_amount' : '$amount' }),
   });
 
   let scheduleBalance = 0;
@@ -127,15 +134,17 @@ export function SelectedBalance({
       name={t('Selected balance:')}
       balance={balance}
       isExactBalance={isExactBalance}
+      currency={currency}
     />
   );
 }
 
 type FilteredBalanceProps = {
   filteredAmount?: number | null;
+  currency?: string | null;
 };
 
-function FilteredBalance({ filteredAmount }: FilteredBalanceProps) {
+function FilteredBalance({ filteredAmount, currency }: FilteredBalanceProps) {
   const { t } = useTranslation();
 
   return (
@@ -143,15 +152,17 @@ function FilteredBalance({ filteredAmount }: FilteredBalanceProps) {
       name={t('Filtered balance:')}
       balance={filteredAmount ?? 0}
       isExactBalance
+      currency={currency}
     />
   );
 }
 
 type MoreBalancesProps = {
   balanceQuery: { name: `balance-query-${string}`; query: Query };
+  currency?: string | null;
 };
 
-function MoreBalances({ balanceQuery }: MoreBalancesProps) {
+function MoreBalances({ balanceQuery, currency }: MoreBalancesProps) {
   const { t } = useTranslation();
 
   const cleared = useSheetValue<'balance', `balance-query-${string}-cleared`>({
@@ -169,8 +180,16 @@ function MoreBalances({ balanceQuery }: MoreBalancesProps) {
 
   return (
     <>
-      <DetailedBalance name={t('Cleared total:')} balance={cleared ?? 0} />
-      <DetailedBalance name={t('Uncleared total:')} balance={uncleared ?? 0} />
+      <DetailedBalance
+        name={t('Cleared total:')}
+        balance={cleared ?? 0}
+        currency={currency}
+      />
+      <DetailedBalance
+        name={t('Uncleared total:')}
+        balance={uncleared ?? 0}
+        currency={currency}
+      />
     </>
   );
 }
@@ -193,6 +212,7 @@ export function Balances({
   filteredAmount,
 }: BalancesProps) {
   const selectedItems = useSelectedItems();
+  const currency = useForeignCurrencyOf(account);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const isButtonHovered = useHover(buttonRef as RefObject<HTMLButtonElement>);
 
@@ -229,6 +249,7 @@ export function Balances({
           {props => (
             <CellValueText
               {...props}
+              currency={currency}
               style={{
                 fontSize: 22,
                 fontWeight: 400,
@@ -258,12 +279,16 @@ export function Balances({
         />
       </Button>
 
-      {showExtraBalances && <MoreBalances balanceQuery={balanceQuery} />}
+      {showExtraBalances && (
+        <MoreBalances balanceQuery={balanceQuery} currency={currency} />
+      )}
 
       {selectedItems.size > 0 && (
         <SelectedBalance selectedItems={selectedItems} account={account} />
       )}
-      {isFiltered && <FilteredBalance filteredAmount={filteredAmount} />}
+      {isFiltered && (
+        <FilteredBalance filteredAmount={filteredAmount} currency={currency} />
+      )}
     </View>
   );
 }

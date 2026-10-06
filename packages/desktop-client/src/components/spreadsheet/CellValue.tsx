@@ -32,6 +32,8 @@ type CellValueProps<
   }) => ReactNode;
   binding: Binding<SheetName, FieldName>;
   type?: FormatType;
+  // The currency of the value when it is not the currency of the budget
+  currency?: string | null;
 };
 
 export function CellValue<
@@ -63,6 +65,8 @@ type CellValueTextProps<
   name: string;
   value: Spreadsheets[SheetName][FieldName];
   style?: CSSProperties;
+  // The currency of the value when it is not the currency of the budget
+  currency?: string | null;
   formatter?: (
     value: Spreadsheets[SheetName][FieldName],
     type?: FormatType,
@@ -78,9 +82,10 @@ export function CellValueText<
   value,
   formatter,
   style,
+  currency,
   ...props
 }: CellValueTextProps<SheetName, FieldName>) {
-  const format = useFormat();
+  const format = useFormat(currency);
   const isFinancial =
     type === 'financial' ||
     type === 'financial-with-sign' ||

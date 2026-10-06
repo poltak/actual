@@ -20,13 +20,17 @@ const categoryParametrizedField = parametrizedField<'category'>();
 const envelopeParametrizedField = parametrizedField<'envelope-budget'>();
 const trackingParametrizedField = parametrizedField<'tracking-budget'>();
 
+// The balance of one account is in the currency of that account, so it
+// adds `native_amount`. For an account in the currency of the budget,
+// that field gives `amount`. The totals of more than one account add
+// `amount`, the value in the currency of the budget.
 export function accountBalance(accountId: AccountEntity['id']) {
   return {
     name: accountParametrizedField('balance')(accountId),
     query: q('transactions')
       .filter({ account: accountId })
       .options({ splits: 'none' })
-      .calculate({ $sum: '$amount' }),
+      .calculate({ $sum: '$native_amount' }),
   } satisfies Binding<'account', 'balance'>;
 }
 
@@ -36,7 +40,7 @@ export function accountBalanceCleared(accountId: AccountEntity['id']) {
     query: q('transactions')
       .filter({ account: accountId, cleared: true })
       .options({ splits: 'none' })
-      .calculate({ $sum: '$amount' }),
+      .calculate({ $sum: '$native_amount' }),
   } satisfies Binding<'account', 'balanceCleared'>;
 }
 
@@ -46,7 +50,7 @@ export function accountBalanceUncleared(accountId: AccountEntity['id']) {
     query: q('transactions')
       .filter({ account: accountId, cleared: false })
       .options({ splits: 'none' })
-      .calculate({ $sum: '$amount' }),
+      .calculate({ $sum: '$native_amount' }),
   } satisfies Binding<'account', 'balanceUncleared'>;
 }
 

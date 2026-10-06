@@ -375,6 +375,14 @@ export type Modal =
       };
     }
   | {
+      name: 'transaction-amounts';
+      options: {
+        transactionId: TransactionEntity['id'];
+        // The page loads its transactions again after a save
+        onSaved?: () => void;
+      };
+    }
+  | {
       name: 'category-menu';
       options: {
         categoryId: CategoryEntity['id'];

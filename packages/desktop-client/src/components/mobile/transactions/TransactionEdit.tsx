@@ -115,6 +115,7 @@ import {
   toDbDiff,
   toView,
 } from '#transactions/accountCurrencyView';
+import { getAmountFields } from '#transactions/amountFields';
 import { ensureRatesOrNotify } from '#transactions/exchangeRates';
 import { setLastTransaction } from '#transactions/transactionsSlice';
 import { getStatusLabel } from '#util/schedule';
@@ -753,6 +754,23 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
       [getTransferAccount],
     );
 
+    // The dialog for the amounts that the exchange rate cannot know. It
+    // is for a stored transaction that has such an amount.
+    const { foreignCurrencyOf } = useTableCurrencies();
+    const transferAccount = transaction?.transfer_id
+      ? getTransferAccount(transaction)
+      : undefined;
+    const amountFields = getAmountFields({
+      currency,
+      hasPartner: transferAccount != null,
+      partnerCurrency: foreignCurrencyOf(transferAccount?.id),
+    });
+    const canSetAmounts =
+      !isAdding &&
+      !!transaction &&
+      !transaction.is_parent &&
+      (amountFields.hasOtherSideField || amountFields.hasBaseValueField);
+
     const getCategory = useCallback(
       (trans: TransactionEntity, isOffBudget: boolean) => {
         if (isOffBudget) {
@@ -1262,6 +1280,25 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
               onChange={onTotalAmountUpdate}
               variant="large"
             />
+            {canSetAmounts && (
+              <Button
+                variant="bare"
+                isDisabled={!!editingField}
+                onPress={() =>
+                  dispatch(
+                    pushModal({
+                      modal: {
+                        name: 'transaction-amounts',
+                        options: { transactionId: transaction.id },
+                      },
+                    }),
+                  )
+                }
+                style={{ marginTop: 6, color: theme.pageTextLink }}
+              >
+                <Trans>Amounts in two currencies</Trans>
+              </Button>
+            )}
           </View>
 
           <View>
@@ -1881,6 +1918,30 @@ function TransactionEditUnconnected({
           deleted: diff.deleted,
           updated: diff.updated,
         });
+
+        // The server gave the other side of a new transfer between two
+        // currencies an amount from the exchange rate. The real amount
+        // is almost never that number, so the dialog asks for it.
+        const newTransfer = changes.added.find(row => {
+          const otherAccount = payees.find(
+            payee => payee.id === row.payee,
+          )?.transfer_acct;
+          return (
+            otherAccount != null &&
+            !row.is_parent &&
+            foreignCurrencyOf(row.account) !== foreignCurrencyOf(otherAccount)
+          );
+        });
+        if (newTransfer) {
+          dispatch(
+            pushModal({
+              modal: {
+                name: 'transaction-amounts',
+                options: { transactionId: newTransfer.id },
+              },
+            }),
+          );
+        }
 
         // if (onTransactionsChange) {
         //   onTransactionsChange({

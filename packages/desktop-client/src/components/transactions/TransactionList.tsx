@@ -210,6 +210,16 @@ export function TransactionList({
     transactionsLatest.current = transactions;
   }, [transactions]);
 
+  const transferAccountOf = useMemo(() => {
+    const accountByPayee = new Map(
+      payees.flatMap(payee =>
+        payee.transfer_acct ? [[payee.id, payee.transfer_acct] as const] : [],
+      ),
+    );
+    return (payeeId: string | null | undefined) =>
+      (payeeId ? accountByPayee.get(payeeId) : undefined) ?? null;
+  }, [payees]);
+
   // Gets the exchange rates that a save needs, and maps the rows that
   // are in the view form. Gives null when a rate is not available: the
   // save must stop then, because the server cannot convert the amount.
@@ -253,8 +263,37 @@ export function TransactionList({
         await saveDiff(diff, isLearnCategoriesEnabled);
       }
       onRefetch();
+
+      // The server gave the other side of a new transfer between two
+      // currencies an amount from the exchange rate. The real amount is
+      // almost never that number, so the dialog asks for it.
+      const transfer = newTransactions.find(row => {
+        const otherAccount = transferAccountOf(row.payee);
+        return (
+          otherAccount != null &&
+          !row.is_parent &&
+          foreignCurrencyOf(row.account) !== foreignCurrencyOf(otherAccount)
+        );
+      });
+      if (diff && transfer) {
+        dispatch(
+          pushModal({
+            modal: {
+              name: 'transaction-amounts',
+              options: { transactionId: transfer.id, onSaved: onRefetch },
+            },
+          }),
+        );
+      }
     },
-    [isLearnCategoriesEnabled, onRefetch, prepareDiff],
+    [
+      dispatch,
+      foreignCurrencyOf,
+      isLearnCategoriesEnabled,
+      onRefetch,
+      prepareDiff,
+      transferAccountOf,
+    ],
   );
 
   const onSave = useCallback(
@@ -625,6 +664,8 @@ export function TransactionList({
       <TableCurrencyProvider
         pageCurrency={pageCurrency}
         foreignCurrencyOf={foreignCurrencyOf}
+        transferAccountOf={transferAccountOf}
+        onRefetch={onRefetch}
       >
         <TransactionTable
           ref={tableRef}

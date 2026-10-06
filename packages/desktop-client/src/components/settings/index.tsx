@@ -21,6 +21,7 @@ import { Checkbox, FormField, FormLabel } from '#components/forms';
 import { MOBILE_NAV_HEIGHT } from '#components/mobile/MobileNavTabs';
 import { MobilePageHeader, Page } from '#components/Page';
 import { useServerURL, useServerVersion } from '#components/ServerContext';
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useGlobalPref } from '#hooks/useGlobalPref';
 import { useMetadataPref } from '#hooks/useMetadataPref';
@@ -327,6 +328,8 @@ export function Settings() {
   const { isNarrowWidth } = useResponsive();
   const dispatch = useDispatch();
   const isCurrencyExperimentalEnabled = useFeatureFlag('currency');
+  const { hasForeignAccount, isPending: isAccountsPending } =
+    useAccountCurrencies();
 
   useEffect(() => {
     const unlisten = listen('prefs-updated', () => {
@@ -338,10 +341,20 @@ export function Settings() {
   }, [dispatch]);
 
   useEffect(() => {
+    // The currency of the budget must stay while an account has a
+    // different one. The amounts of that account are converted to it.
+    if (isAccountsPending || hasForeignAccount) {
+      return;
+    }
     if (!isCurrencyExperimentalEnabled) {
       void dispatch(saveSyncedPrefs({ prefs: { defaultCurrencyCode: '' } }));
     }
-  }, [dispatch, isCurrencyExperimentalEnabled]);
+  }, [
+    dispatch,
+    isCurrencyExperimentalEnabled,
+    isAccountsPending,
+    hasForeignAccount,
+  ]);
 
   if (isNarrowWidth) {
     return <Outlet />;

@@ -13,8 +13,6 @@ import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import {
-  amountToCurrency,
-  appendDecimals,
   currencyToAmount,
   reapplyThousandSeparators,
 } from '@actual-app/core/shared/util';
@@ -24,8 +22,12 @@ import { makeAmountFullStyle } from '#components/budget/util';
 import { useMergedRefs } from '#hooks/useMergedRefs';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 
+import { appendFieldDecimals, formatFieldAmount } from './fieldAmount';
+
 type AmountInputProps = {
   value: number;
+  // The currency of the amount when it is not the currency of the budget
+  currency?: string | null;
   focused?: boolean;
   style?: CSSProperties;
   textStyle?: CSSProperties;
@@ -42,6 +44,7 @@ const AmountInput = memo(function AmountInput({
   focused,
   style,
   textStyle,
+  currency,
   ...props
 }: AmountInputProps) {
   const [editing, setEditing] = useState(false);
@@ -118,7 +121,11 @@ const AmountInput = memo(function AmountInput({
 
   const onChangeText = (text: string) => {
     text = reapplyThousandSeparators(text);
-    text = appendDecimals(text, String(hideFraction) === 'true');
+    text = appendFieldDecimals({
+      text,
+      hideDecimals: String(hideFraction) === 'true',
+      currencyCode: currency,
+    });
     setEditing(true);
     setText(text);
     props.onChangeValue?.(text);
@@ -161,7 +168,9 @@ const AmountInput = memo(function AmountInput({
         }}
         data-testid="amount-input-text"
       >
-        {editing ? text || amountToCurrency(0) : amountToCurrency(value)}
+        {editing
+          ? text || formatFieldAmount(0, currency)
+          : formatFieldAmount(value, currency)}
       </Text>
     </View>
   );
@@ -192,6 +201,7 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
   onFocus,
   onBlur,
   onChangeValue,
+  currency,
   ...props
 }: FocusableAmountInputProps) {
   const [isNegative, setIsNegative] = useState(true);
@@ -237,6 +247,7 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
       <AmountInput
         {...props}
         value={value}
+        currency={currency}
         onFocus={onFocus}
         onBlur={onBlur}
         onChangeValue={handleChangeValue}
@@ -308,7 +319,7 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
                 ...textStyle,
               }}
             >
-              {amountToCurrency(Math.abs(value))}
+              {formatFieldAmount(Math.abs(value), currency)}
             </Text>
           </View>
         </Button>

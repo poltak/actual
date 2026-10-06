@@ -40,6 +40,8 @@ type AmountInputProps = {
   focused?: boolean;
   disabled?: boolean;
   autoDecimals?: boolean;
+  // The currency of the amount when it is not the currency of the budget
+  currency?: string | null;
 };
 
 export function AmountInput({
@@ -59,9 +61,10 @@ export function AmountInput({
   focused,
   disabled = false,
   autoDecimals = false,
+  currency,
 }: AmountInputProps) {
   const { t } = useTranslation();
-  const format = useFormat();
+  const format = useFormat(currency);
   const [symbol, setSymbol] = useState<'+' | '-'>(() => {
     if (sign) return sign;
     return initialValue === 0 ? zeroSign : initialValue > 0 ? '+' : '-';

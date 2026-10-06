@@ -2,6 +2,7 @@ import type { FocusEvent, ReactNode } from 'react';
 import { memo, useEffect, useState } from 'react';
 
 import { styles } from '@actual-app/components/styles';
+import { getDecimalPlaces } from '@actual-app/core/shared/currencies';
 import { amountToInteger, integerToAmount } from '@actual-app/core/shared/util';
 
 import { AmountInput as LegacyAmountInput } from '#components/util/AmountInput';
@@ -20,6 +21,8 @@ export type SplitAmountInputProps = {
   keyboardHeader?: ReactNode;
   autoFocus?: boolean;
   disabled?: boolean;
+  // The currency of the amount when it is not the currency of the budget
+  currency?: string | null;
 };
 
 export const SplitAmountInput = memo(function SplitAmountInput({
@@ -32,9 +35,16 @@ export const SplitAmountInput = memo(function SplitAmountInput({
   onFocus,
   value,
   keyboardHeader,
+  currency,
 }: SplitAmountInputProps) {
   const mobileCalculatorEnabled = useFeatureFlag('mobileCalculator');
   const [hideFraction] = useSyncedPref('hideFraction');
+  // The form keeps amounts as numbers with decimals. An integer amount
+  // has the decimal places of its currency.
+  const decimalPlaces = currency ? getDecimalPlaces(currency) : 2;
+  const hasAutoDecimals = currency
+    ? decimalPlaces > 0
+    : String(hideFraction) !== 'true';
   const [focused, setFocused] = useState(autoFocus);
 
   useEffect(() => {
@@ -67,7 +77,8 @@ export const SplitAmountInput = memo(function SplitAmountInput({
 
   return (
     <LegacyAmountInput
-      autoDecimals={String(hideFraction) !== 'true'}
+      autoDecimals={hasAutoDecimals}
+      currency={currency}
       disabled={disabled}
       focused={focused}
       inputStyle={{
@@ -85,13 +96,13 @@ export const SplitAmountInput = memo(function SplitAmountInput({
         onFocus?.(event);
       }}
       onUpdate={amount => {
-        const nextAmount = integerToAmount(amount);
+        const nextAmount = integerToAmount(amount, decimalPlaces);
         if (nextAmount !== value) {
           onChange?.(nextAmount);
         }
       }}
       style={{ marginRight: 8 }}
-      value={amountToInteger(value)}
+      value={amountToInteger(value, decimalPlaces)}
       zeroSign={negate ? '-' : '+'}
     />
   );

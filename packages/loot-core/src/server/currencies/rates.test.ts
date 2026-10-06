@@ -225,6 +225,19 @@ describe('fetchFrankfurterRates', () => {
 });
 
 describe('ensureRates', () => {
+  it('stops with no error when the budget closes while the download runs', async () => {
+    await turnDownloadOn();
+    const request = { from: 'USD', to: 'VND', date: '2016-12-10' };
+    fetchRates.mockImplementation(async () => {
+      db.closeDatabase();
+      return usdRates([{ date: '2016-12-10', rate: 25000 }]);
+    });
+
+    expect(await ensureRates({ requests: [request], fetchRates })).toEqual({
+      missing: [request],
+    });
+  });
+
   it('does not download while the user did not turn the download on', async () => {
     const request = { from: 'USD', to: 'VND', date: '2016-12-10' };
 

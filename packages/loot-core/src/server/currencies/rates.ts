@@ -265,6 +265,11 @@ export async function ensureRates({
           start: dates[0],
           end: dates[dates.length - 1],
         });
+        if (!db.getDatabase()) {
+          // The budget was closed while the download ran, so there is
+          // no place for the rates and nothing to read
+          return { missing: [...wanted.values()] };
+        }
         // A range gives each day between its ends. Only the days that a
         // request named are stored, because each row syncs to all devices.
         const asked = new Set(dates);

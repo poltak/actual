@@ -1,3 +1,4 @@
+import { getDecimalPlaces } from '@actual-app/core/shared/currencies';
 import {
   dayFromDate,
   getDayMonthFormat,
@@ -84,8 +85,14 @@ export function transactionsSearch(
   currentQuery: Query,
   search: string,
   dateFormat: SyncedPrefs['dateFormat'],
+  // The currency of the account of the page when it is not the currency
+  // of the budget. A number in the search text is then an amount in
+  // that currency.
+  foreignCurrency: string | null = null,
 ) {
   const amount = currencyToAmount(search);
+  const amountField = foreignCurrency ? 'native_amount' : 'amount';
+  const decimalPlaces = foreignCurrency ? getDecimalPlaces(foreignCurrency) : 2;
   const escapedSearch = search.replace(/[\\%?]/g, '\\$&');
 
   // Support various date formats
@@ -108,12 +115,17 @@ export function transactionsSearch(
       $or: [
         isDateValid(parsedDate) && { date: dayFromDate(parsedDate) },
         amount != null && {
-          amount: { $transform: '$abs', $eq: amountToInteger(amount) },
+          [amountField]: {
+            $transform: '$abs',
+            $eq: amountToInteger(amount, decimalPlaces),
+          },
         },
         amount != null &&
           Number.isInteger(amount) && {
-            amount: {
-              $transform: { $abs: { $idiv: ['$', 100] } },
+            [amountField]: {
+              $transform: {
+                $abs: { $idiv: ['$', Math.pow(10, decimalPlaces)] },
+              },
               $eq: amount,
             },
           },

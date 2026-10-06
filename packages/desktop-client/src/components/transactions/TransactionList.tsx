@@ -379,7 +379,19 @@ export function TransactionList({
       transaction: TransactionEntity,
       updatedFieldName: string | null = null,
     ) => {
-      const afterRules = await send('rules-run', { transaction });
+      // A row in the view form goes to the rules with one number, the
+      // amount in the currency of its account. The rules read a row with
+      // one number that way, and the result has the same form.
+      const isInViewForm =
+        hasViewRows || foreignCurrencyOf(transaction.account) != null;
+      const afterRules = await send('rules-run', {
+        transaction: isInViewForm
+          ? { ...transaction, native_amount: undefined }
+          : transaction,
+      });
+      if (isInViewForm) {
+        afterRules.native_amount = transaction.native_amount;
+      }
 
       // Show formula errors if any
       if (afterRules._ruleErrors && afterRules._ruleErrors.length > 0) {
@@ -424,7 +436,7 @@ export function TransactionList({
       }
       return newTransaction;
     },
-    [dispatch],
+    [dispatch, hasViewRows, foreignCurrencyOf],
   );
 
   const onManagePayees = useCallback(

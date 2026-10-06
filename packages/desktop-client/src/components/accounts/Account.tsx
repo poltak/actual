@@ -191,7 +191,7 @@ function AllTransactions({
   return children(allTransactions, allBalances);
 }
 
-function getField(field?: string) {
+function getField(field?: string, amountField = 'amount') {
   if (!field) {
     return 'date';
   }
@@ -204,9 +204,9 @@ function getField(field?: string) {
     case 'category':
       return 'category.name';
     case 'payment':
-      return 'amount';
+      return amountField;
     case 'deposit':
-      return 'amount';
+      return amountField;
     default:
       return field;
   }
@@ -606,6 +606,7 @@ class AccountInternal extends PureComponent<
           this.currentQuery,
           this.state.search,
           this.props.dateFormat,
+          this.props.foreignCurrency,
         ),
         true,
       );
@@ -1611,6 +1612,9 @@ class AccountInternal extends PureComponent<
           conditions: conditions.filter(
             cond => isTransactionFilterEntity(cond) || !cond.customName,
           ),
+          // On the page of a foreign currency account, an amount filter
+          // compares the amount in the currency of the account
+          ...(this.props.foreignCurrency && { amountField: 'native_amount' }),
         },
       );
       const conditionsOpKey =
@@ -1652,10 +1656,17 @@ class AccountInternal extends PureComponent<
   ) => {
     const filterConditions = this.state.filterConditions;
     const isFiltered = filterConditions.length > 0;
-    const sortField = getField(!field ? this.state.sort?.field : field);
+    // The page of a foreign currency account sorts by the amount in the
+    // currency of the account
+    const amountField = this.props.foreignCurrency ? 'native_amount' : 'amount';
+    const sortField = getField(
+      !field ? this.state.sort?.field : field,
+      amountField,
+    );
     const sortAscDesc = !ascDesc ? this.state.sort?.ascDesc : ascDesc;
     const sortPrevField = getField(
       !prevField ? this.state.sort?.prevField : prevField,
+      amountField,
     );
     const sortPrevAscDesc = !prevField
       ? this.state.sort?.prevAscDesc

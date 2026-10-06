@@ -18,6 +18,7 @@ import { FinancialText } from '#components/FinancialText';
 import { FieldLabel } from '#components/mobile/MobileForms';
 import { AmountInput } from '#components/mobile/transactions/AmountInput';
 import { useAccount } from '#hooks/useAccount';
+import { useForeignCurrencyOf } from '#hooks/useAccountCurrencies';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useFormat } from '#hooks/useFormat';
@@ -41,7 +42,7 @@ export function AccountReconcileModal({
   const clearedBalance = useSheetValue<'account', 'balanceCleared'>(
     bindings.accountBalanceCleared(accountId),
   );
-  const format = useFormat();
+  const format = useFormat(useForeignCurrencyOf(account));
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const locale = useLocale();
 

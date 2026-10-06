@@ -18,7 +18,6 @@ import { TextOneLine } from '@actual-app/components/text-one-line';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { isPreviewId } from '@actual-app/core/shared/transactions';
-import { integerToCurrency } from '@actual-app/core/shared/util';
 import type { IntegerAmount } from '@actual-app/core/shared/util';
 import type {
   AccountEntity,
@@ -32,6 +31,8 @@ import {
 
 import { makeAmountFullStyle } from '#components/budget/util';
 import { TransferDirectionIcon } from '#components/common/TransferDirectionIcon';
+import { useTableCurrencies } from '#components/transactions/table/TableCurrencyContext';
+import { formatAmount } from '#components/transactions/table/utils';
 import { useAccount } from '#hooks/useAccount';
 import { useCachedSchedules } from '#hooks/useCachedSchedules';
 import { useCategories } from '#hooks/useCategories';
@@ -87,6 +88,9 @@ export function TransactionListItem({
   ...itemProps
 }: TransactionListItemProps) {
   const { t } = useTranslation();
+  // The page of a foreign currency account gives its rows with the
+  // amount in the currency of the account
+  const { pageCurrency } = useTableCurrencies();
   const { data: { list: categories } = { list: [] } } = useCategories();
 
   const { data: payee } = usePayee(transaction?.payee);
@@ -319,7 +323,7 @@ export function TransactionListItem({
                   ...textStyle,
                 }}
               >
-                {integerToCurrency(amount)}
+                {formatAmount(amount, pageCurrency)}
               </Text>
               {showRunningBalance && runningBalance !== undefined && (
                 <Text
@@ -334,7 +338,7 @@ export function TransactionListItem({
                     }),
                   }}
                 >
-                  {integerToCurrency(runningBalance)}
+                  {formatAmount(runningBalance, pageCurrency)}
                 </Text>
               )}
             </View>

@@ -14,6 +14,7 @@ import type { TransactionEntity } from '@actual-app/core/types/models';
 import { Search } from '#components/common/Search';
 import { PullToRefresh } from '#components/mobile/PullToRefresh';
 import { CellValue, CellValueText } from '#components/spreadsheet/CellValue';
+import { useTableCurrencies } from '#components/transactions/table/TableCurrencyContext';
 import { DisplayPayeeProvider } from '#hooks/useDisplayPayee';
 import { SelectedProvider, useSelected } from '#hooks/useSelected';
 import { useSheetValue } from '#hooks/useSheetValue';
@@ -234,6 +235,7 @@ function BalanceWithCleared({
   alwaysShowCleared = false,
 }: BalanceWithClearedProps) {
   const { t } = useTranslation();
+  const { pageCurrency } = useTableCurrencies();
   const unclearedAmount = useSheetValue<
     'account' | 'category',
     'balanceUncleared'
@@ -259,6 +261,7 @@ function BalanceWithCleared({
           {props => (
             <CellValueText
               {...props}
+              currency={pageCurrency}
               style={{
                 fontSize: 12,
                 textAlign: 'center',
@@ -287,6 +290,7 @@ function BalanceWithCleared({
           {props => (
             <CellValueText
               {...props}
+              currency={pageCurrency}
               style={{
                 fontSize: 12,
                 textAlign: 'center',
@@ -307,6 +311,7 @@ type BalanceProps = {
 
 function Balance({ balance }: BalanceProps) {
   const { t } = useTranslation();
+  const { pageCurrency } = useTableCurrencies();
   return (
     <View style={{ flexBasis: '33%' }}>
       <Label title={t('Balance')} style={{ textAlign: 'center' }} />
@@ -314,6 +319,7 @@ function Balance({ balance }: BalanceProps) {
         {props => (
           <CellValueText
             {...props}
+            currency={pageCurrency}
             style={{
               fontSize: 18,
               textAlign: 'center',

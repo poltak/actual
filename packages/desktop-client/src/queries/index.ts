@@ -1,4 +1,8 @@
 import {
+  getCurrency,
+  getDecimalPlaces,
+} from '@actual-app/core/shared/currencies';
+import {
   dayFromDate,
   getDayMonthFormat,
   getDayMonthRegex,
@@ -86,12 +90,19 @@ export function transactionsSearch(
   search: string,
   dateFormat: SyncedPrefs['dateFormat'],
   currencySymbol: string,
+  // The currency of the account of the page when it is not the currency
+  // of the budget. A number in the search text is then an amount in
+  // that currency.
+  foreignCurrency: string | null = null,
 ) {
   // currencyToAmount ignores letters, so "35mm" would match the amount 35.
   // Letters make a search text-only, except a leading or trailing currency
   // symbol ("120 kr", "-CHF 12").
-  const symbol = escapeRegExp(currencySymbol);
-  const amountSearch = currencySymbol
+  const searchSymbol = foreignCurrency
+    ? getCurrency(foreignCurrency).symbol
+    : currencySymbol;
+  const symbol = escapeRegExp(searchSymbol);
+  const amountSearch = searchSymbol
     ? search.replace(
         new RegExp(
           `^([^\\p{L}\\d]*)${symbol}|${symbol}(?=[^\\p{L}\\d]*$)`,
@@ -103,6 +114,8 @@ export function transactionsSearch(
   const amount = /\p{L}/u.test(amountSearch)
     ? null
     : currencyToAmount(amountSearch.trim());
+  const amountField = foreignCurrency ? 'native_amount' : 'amount';
+  const decimalPlaces = foreignCurrency ? getDecimalPlaces(foreignCurrency) : 2;
   const escapedSearch = search.replace(/[\\%?]/g, '\\$&');
 
   // Support various date formats
@@ -125,12 +138,17 @@ export function transactionsSearch(
       $or: [
         isDateValid(parsedDate) && { date: dayFromDate(parsedDate) },
         amount != null && {
-          amount: { $transform: '$abs', $eq: amountToInteger(amount) },
+          [amountField]: {
+            $transform: '$abs',
+            $eq: amountToInteger(amount, decimalPlaces),
+          },
         },
         amount != null &&
           Number.isInteger(amount) && {
-            amount: {
-              $transform: { $abs: { $idiv: ['$', 100] } },
+            [amountField]: {
+              $transform: {
+                $abs: { $idiv: ['$', Math.pow(10, decimalPlaces)] },
+              },
               $eq: amount,
             },
           },

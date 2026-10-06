@@ -674,7 +674,8 @@ handlers['api/transaction-delete'] = withMutation(async function ({ id }) {
   }
 
   const { diff } = deleteTransaction(transactions, id);
-  return handlers['transactions-batch-update'](diff)['deleted'];
+  const { deleted } = await handlers['transactions-batch-update'](diff);
+  return deleted;
 });
 
 handlers['api/transactions-merge'] = withMutation(async function ({ ids }) {

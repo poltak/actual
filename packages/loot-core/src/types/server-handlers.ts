@@ -7,6 +7,11 @@ export type ServerHandlers = {
   'make-filters-from-conditions': (arg: {
     conditions: unknown;
     applySpecialCases?: boolean;
+    // The number that an amount condition compares. The default is
+    // `amount`, the value in the base currency. `native_amount` is the
+    // amount in the currency of the account, which a rule and a
+    // schedule see.
+    amountField?: 'amount' | 'native_amount';
   }) => Promise<{ filters: unknown[] }>;
 
   // oxlint-disable-next-line typescript/no-explicit-any

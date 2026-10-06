@@ -2,6 +2,10 @@
 
 import { logger } from '#platform/server/log';
 import { aqlQuery, schemaConfig } from '#server/aql';
+import {
+  getBaseCurrency,
+  isForeignCurrency,
+} from '#server/currencies/base-currency';
 import * as db from '#server/db';
 import {
   getAccount,
@@ -466,10 +470,25 @@ function conditionSpecialCases(cond: Condition | null): Condition | null {
   return cond;
 }
 
+export type AmountField = 'amount' | 'native_amount';
+
 // This does the inverse: finds all the transactions matching a rule
+//
+// `amountField` says which number an amount condition compares. A rule
+// and a schedule see the amount in the currency of the account, so
+// their callers pass `native_amount`. A report adds transactions of all
+// accounts, so it keeps the default, the value in the base currency.
 export function conditionsToAQL(
   conditions,
-  { recurDateBounds = 100, applySpecialCases = true } = {},
+  {
+    recurDateBounds = 100,
+    applySpecialCases = true,
+    amountField = 'amount',
+  }: {
+    recurDateBounds?: number;
+    applySpecialCases?: boolean;
+    amountField?: AmountField;
+  } = {},
 ) {
   const errors = [];
 
@@ -527,18 +546,21 @@ export function conditionsToAQL(
           if (options.outflow) {
             return {
               $and: [
-                { amount: { $lt: 0 } },
-                { [field]: { $transform: '$neg', [aqlOp]: value } },
+                { [amountField]: { $lt: 0 } },
+                { [amountField]: { $transform: '$neg', [aqlOp]: value } },
               ],
             };
           } else if (options.inflow) {
             return {
-              $and: [{ amount: { $gt: 0 } }, { [field]: { [aqlOp]: value } }],
+              $and: [
+                { [amountField]: { $gt: 0 } },
+                { [amountField]: { [aqlOp]: value } },
+              ],
             };
           }
         }
 
-        return { amount: { [aqlOp]: value } };
+        return { [amountField]: { [aqlOp]: value } };
       } else if (type === 'string') {
         return {
           [field]: {
@@ -1044,10 +1066,18 @@ export type TransactionForRules = TransactionEntity & {
   parent_account?: string;
   /** Prefetched cent balances for BALANCE_OF("…") in rule formulas; cleared in finalize */
   _balanceOfPrefetched?: Map<string, number>;
+  /**
+   * The value in the base currency of a row in a foreign currency
+   * account. While the rules run, `amount` holds the amount in the
+   * currency of the account. See prepareTransactionForRules.
+   */
+  _base_amount?: number;
+  subtransactions?: TransactionForRules[];
 };
 
 /**
  * Running balance for `accountId` before the current transaction row (same cutoff as `balance`).
+ * It is in the currency of the account, as on the account page.
  */
 export async function getRunningBalanceBeforeTransaction(
   trans: TransactionEntity,
@@ -1085,7 +1115,7 @@ export async function getRunningBalanceBeforeTransaction(
   const { data: balance } = await aqlQuery(
     query
       .filter({ $or: [{ date: { $lt: dateBoundary } }, sameDayFilter] })
-      .calculate({ $sum: '$amount' }),
+      .calculate({ $sum: '$native_amount' }),
   );
 
   return balance ?? 0;
@@ -1165,6 +1195,15 @@ export async function prepareTransactionForRules(
         trans.account,
       );
     }
+
+    if (await isForeignAccount(r._account)) {
+      showNativeAmount(r);
+      if (r.subtransactions) {
+        r.subtransactions = r.subtransactions.map(child =>
+          showNativeAmount({ ...child }),
+        );
+      }
+    }
   }
 
   if (trans.category) {
@@ -1185,6 +1224,50 @@ export async function prepareTransactionForRules(
   }
 
   return r;
+}
+
+async function isForeignAccount(
+  account: Pick<db.DbAccount, 'currency'> | null | undefined,
+): Promise<boolean> {
+  if (!account?.currency) {
+    return false;
+  }
+  return isForeignCurrency({
+    currency: account.currency,
+    baseCurrency: await getBaseCurrency(),
+  });
+}
+
+/**
+ * A rule and a schedule work with the number on the account page. For a
+ * row in a foreign currency account that number is `native_amount`, so
+ * it goes into `amount` while the rules run, and the value in the base
+ * currency waits in `_base_amount`.
+ *
+ * A row with no `native_amount` stays as it is. It comes from an import
+ * or from a schedule, and its `amount` is already in the currency of
+ * the account.
+ */
+function showNativeAmount(row: TransactionForRules): TransactionForRules {
+  if (row.native_amount != null) {
+    row._base_amount = row.amount;
+    row.amount = row.native_amount;
+  }
+  return row;
+}
+
+/**
+ * The inverse of `showNativeAmount`. A rule can change the amount, so
+ * the number in `amount` becomes the new `native_amount`. The base value
+ * goes back as it was. The write path calculates it again when the
+ * native amount is different from the stored one.
+ */
+function restoreBaseAmount(row: TransactionEntity | TransactionForRules) {
+  if ('_base_amount' in row) {
+    row.native_amount = row.amount;
+    row.amount = row._base_amount;
+    delete row._base_amount;
+  }
 }
 
 async function resolvePayeeNameForRules(
@@ -1258,6 +1341,8 @@ export async function finalizeTransactionForRules(
     delete trans._balanceOfPrefetched;
   }
 
+  restoreBaseAmount(trans);
+
   for (const field of [
     'parent_amount',
     'parent_notes',
@@ -1275,6 +1360,8 @@ export async function finalizeTransactionForRules(
       if ('balance' in stx) {
         delete stx.balance;
       }
+
+      restoreBaseAmount(stx);
 
       if ('_balanceOfPrefetched' in stx) {
         delete stx._balanceOfPrefetched;

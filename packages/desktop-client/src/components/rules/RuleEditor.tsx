@@ -1083,8 +1083,10 @@ export function RuleEditor({
 
     // Run it here
     async function run() {
+      // A rule compares the amount in the currency of the account
       const { filters } = await send('make-filters-from-conditions', {
         conditions: conditions.map(unparse),
+        amountField: 'native_amount',
       });
 
       if (filters.length > 0) {

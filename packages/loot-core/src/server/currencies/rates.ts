@@ -31,6 +31,13 @@ export type RateRow = RateRequest & {
   rate: number;
 };
 
+export type FetchRates = (range: {
+  from: string;
+  to: string;
+  start: string;
+  end: string;
+}) => Promise<RateRow[]>;
+
 export type StoredRate = {
   rate: number;
   date: string;
@@ -171,11 +178,14 @@ export async function fetchFrankfurterRates({
   to,
   start,
   end,
+  fetchImpl = fetch,
 }: {
   from: string;
   to: string;
   start: string;
   end: string;
+  // A test gives its own function, so that it never uses the network
+  fetchImpl?: typeof fetch;
 }): Promise<RateRow[]> {
   const params = new URLSearchParams({
     base: from,
@@ -185,7 +195,7 @@ export async function fetchFrankfurterRates({
   });
   // The fetch wrapper reads a redirect as an expired login unless the
   // request says that a redirect is fine
-  const response = await fetch(`${FRANKFURTER_URL}?${params.toString()}`, {
+  const response = await fetchImpl(`${FRANKFURTER_URL}?${params.toString()}`, {
     redirect: 'follow',
   });
   if (!response.ok) {
@@ -222,8 +232,11 @@ async function isDownloadEnabled(): Promise<boolean> {
  */
 export async function ensureRates({
   requests,
+  fetchRates = fetchFrankfurterRates,
 }: {
   requests: RateRequest[];
+  // A test gives its own function, so that it never uses the network
+  fetchRates?: FetchRates;
 }): Promise<{ missing: RateRequest[] }> {
   const wanted = new Map<string, RateRequest>();
   for (const request of requests) {
@@ -247,7 +260,7 @@ export async function ensureRates({
       const { from, to } = group[0];
       const dates = group.map(request => request.date).sort();
       try {
-        const rates = await fetchFrankfurterRates({
+        const rates = await fetchRates({
           from,
           to,
           start: dates[0],
@@ -284,7 +297,8 @@ let lastRefreshAttempt = 0;
  */
 export async function refreshRatesOfToday({
   now = Date.now(),
-}: { now?: number } = {}): Promise<void> {
+  fetchRates = fetchFrankfurterRates,
+}: { now?: number; fetchRates?: FetchRates } = {}): Promise<void> {
   if (now - lastRefreshAttempt < REFRESH_RETRY_MS) {
     return;
   }
@@ -309,7 +323,7 @@ export async function refreshRatesOfToday({
   }
 
   lastRefreshAttempt = now;
-  await ensureRates({ requests });
+  await ensureRates({ requests, fetchRates });
 }
 
 // For tests

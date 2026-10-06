@@ -17,7 +17,11 @@ export function validForMergeExplanation(
   if (transactionA.account !== transactionB.account) {
     return 'Cannot merge transactions from different accounts';
   }
-  if (transactionA.amount !== transactionB.amount) {
+  // The two are in the same account, so they compare in its currency. The
+  // base values can differ when the two have different dates.
+  const amountA = transactionA.native_amount ?? transactionA.amount;
+  const amountB = transactionB.native_amount ?? transactionB.amount;
+  if (amountA !== amountB) {
     return 'Cannot merge transactions with different amounts';
   }
   // if both transfers, they should both be transferring to the same account to be eligible for merge.

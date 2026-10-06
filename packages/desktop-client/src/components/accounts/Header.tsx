@@ -82,6 +82,7 @@ type AccountHeaderProps = {
   filterConditionsOp: 'and' | 'or';
   onSearch: (newSearch: string) => void;
   onAddTransaction: () => void;
+  onRefetchTransactions: () => void;
   onShowTransactions: ComponentProps<
     typeof SelectedTransactionsButton
   >['onShow'];
@@ -154,6 +155,7 @@ export function AccountHeader({
   filterConditionsOp,
   onSearch,
   onAddTransaction,
+  onRefetchTransactions,
   onShowTransactions,
   onDoneReconciling,
   onCreateReconciliationTransaction,
@@ -319,6 +321,7 @@ export function AccountHeader({
               account={account}
               isFiltered={isFiltered}
               filteredAmount={filteredAmount}
+              onTransactionAdded={onRefetchTransactions}
             />
           </View>
 

@@ -65,13 +65,10 @@ exports[`Accounts > Transfers are properly updated 2`] = `
 "- First value
 + Second value
 
-@@ -1,22 +1,22 @@
-  Array [
-    Object {
+@@ -3,12 +3,12 @@
       "acct": "one",
       "amount": 5000,
--     "amount_locked": null,
-+     "amount_locked": 0,
+      "amount_locked": null,
       "category": null,
       "cleared": 1,
 -     "date": 20170101,
@@ -83,15 +80,6 @@ exports[`Accounts > Transfers are properly updated 2`] = `
       "id": "test-transfer",
       "imported_description": null,
       "isChild": 0,
-      "isParent": 0,
-      "location": null,
--     "native_amount": null,
-+     "native_amount": 5000,
-      "notes": null,
-      "parent_id": null,
-      "pending": 0,
-      "raw_synced_data": null,
-      "reconciled": 0,
 @@ -26,11 +26,11 @@
       "tombstone": 0,
       "transferred_id": "id2",

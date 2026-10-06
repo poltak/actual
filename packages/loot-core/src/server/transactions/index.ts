@@ -1,6 +1,8 @@
 // @ts-strict-ignore
 
 import * as connection from '#platform/server/connection';
+import { planCurrencyWrites } from '#server/currencies/plan';
+import type { AmountSemantics } from '#server/currencies/resolve';
 import * as db from '#server/db';
 import { incrFetch, whereIn } from '#server/db/util';
 import { batchMessages } from '#server/sync';
@@ -44,11 +46,30 @@ export async function batchUpdateTransactions({
   learnCategories = false,
   detectOrphanPayees = true,
   runTransfers = true,
+  amountSemantics = 'native',
 }: Partial<Diff<TransactionEntity>> & {
   learnCategories?: boolean;
   detectOrphanPayees?: boolean;
   runTransfers?: boolean;
+  // How to read an `amount` with no `native_amount` for a row in a
+  // foreign currency account. See `AmountSemantics`.
+  amountSemantics?: AmountSemantics;
 }) {
+  // Decide the amounts of each row before the first write. A rate that
+  // is not stored stops the write here, with nothing changed.
+  const currencyPlan = await planCurrencyWrites({
+    added: added ?? [],
+    updated: updated ?? [],
+    deleted: deleted ?? [],
+    amountSemantics,
+  });
+  if (added) {
+    added = currencyPlan.added as typeof added;
+  }
+  if (updated) {
+    updated = currencyPlan.updated as typeof updated;
+  }
+
   // Track the ids of each type of transaction change (see below for why)
   let addedIds = [];
   const updatedIds = updated ? updated.map(u => u.id) : [];
@@ -125,6 +146,11 @@ export async function batchUpdateTransactions({
         }),
       );
     }
+
+    // A split parent stores the sum of its children
+    await Promise.all(
+      currencyPlan.extraUpdated.map(t => db.updateTransaction(t)),
+    );
   });
 
   // Get all of the full transactions that were changed. This is
@@ -160,11 +186,18 @@ export async function batchUpdateTransactions({
 
   if (runTransfers) {
     await batchMessages(async () => {
-      await Promise.all(allAdded.map(t => transfer.onInsert(t)));
+      const transferOptions = (t: TransactionEntity) => ({
+        otherSideNativeAmount: currencyPlan.transferNativeAmounts.get(t.id),
+      });
+      await Promise.all(
+        allAdded.map(t => transfer.onInsert(t, transferOptions(t))),
+      );
 
       // Return any updates from here
       transfersUpdated = (
-        await Promise.all(allUpdated.map(t => transfer.onUpdate(t)))
+        await Promise.all(
+          allUpdated.map(t => transfer.onUpdate(t, transferOptions(t))),
+        )
       ).filter(Boolean);
 
       await Promise.all(allDeleted.map(t => transfer.onDelete(t)));

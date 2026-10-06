@@ -2013,6 +2013,7 @@ class AccountInternal extends PureComponent<
                 filterConditionsOp={this.state.filterConditionsOp}
                 onSearch={this.onSearch}
                 onShowTransactions={this.onShowTransactions}
+                onRefetchTransactions={this.refetchTransactions}
                 onMenuSelect={this.onMenuSelect}
                 onAddTransaction={this.onAddTransaction}
                 onToggleExtraBalances={this.onToggleExtraBalances}

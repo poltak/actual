@@ -24,6 +24,8 @@ import { useSelectedItems } from '#hooks/useSelected';
 import { useSheetValue } from '#hooks/useSheetValue';
 import type { Binding } from '#spreadsheet';
 
+import { ForeignAccountValue } from './ForeignAccountValue';
+
 type DetailedBalanceProps = {
   name: string;
   balance: number;
@@ -32,7 +34,7 @@ type DetailedBalanceProps = {
   currency?: string | null;
 };
 
-function DetailedBalance({
+export function DetailedBalance({
   name,
   balance,
   isExactBalance = true,
@@ -201,6 +203,8 @@ type BalancesProps = {
   account?: AccountEntity;
   isFiltered: boolean;
   filteredAmount?: number | null;
+  // Called after a transaction was added from the balance bar
+  onTransactionAdded?: () => void;
 };
 
 export function Balances({
@@ -210,6 +214,7 @@ export function Balances({
   account,
   isFiltered,
   filteredAmount,
+  onTransactionAdded,
 }: BalancesProps) {
   const selectedItems = useSelectedItems();
   const currency = useForeignCurrencyOf(account);
@@ -278,6 +283,14 @@ export function Balances({
           }}
         />
       </Button>
+
+      {currency && account && (
+        <ForeignAccountValue
+          account={account}
+          currency={currency}
+          onBooked={onTransactionAdded}
+        />
+      )}
 
       {showExtraBalances && (
         <MoreBalances balanceQuery={balanceQuery} currency={currency} />

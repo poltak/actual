@@ -43,6 +43,7 @@ import { FiltersStack } from '#components/filters/FiltersStack';
 import type { SavedFilter } from '#components/filters/SavedFilterMenuButton';
 import { NotesButton } from '#components/NotesButton';
 import { SelectedTransactionsButton } from '#components/transactions/SelectedTransactionsButton';
+import { useForeignCurrencyOf } from '#hooks/useAccountCurrencies';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useLocale } from '#hooks/useLocale';
@@ -183,6 +184,7 @@ export function AccountHeader({
   onMergeTransactions,
 }: AccountHeaderProps) {
   const { t } = useTranslation();
+  const foreignCurrency = useForeignCurrencyOf(account);
 
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -576,6 +578,7 @@ export function AccountHeader({
           balanceQuery={balanceQuery}
           onDone={onDoneReconciling}
           onCreateTransaction={onCreateReconciliationTransaction}
+          currency={foreignCurrency}
         />
       )}
     </>

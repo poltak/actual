@@ -16,6 +16,7 @@ import { View } from '@actual-app/components/view';
 import { listen, send } from '@actual-app/core/platform/client/connection';
 import * as undo from '@actual-app/core/platform/client/undo';
 import type { UndoState } from '@actual-app/core/server/undo';
+import { currentDay } from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
 import type { Query } from '@actual-app/core/shared/query';
 import {
@@ -92,6 +93,7 @@ import { pagedQuery } from '#queries/pagedQuery';
 import type { PagedQuery } from '#queries/pagedQuery';
 import { useDispatch, useSelector } from '#redux';
 import type { AppDispatch } from '#redux/store';
+import { ensureAccountRatesOrNotify } from '#transactions/exchangeRates';
 import { updateNewTransactions } from '#transactions/transactionsSlice';
 
 import { AccountEmptyMessage } from './AccountEmptyMessage';
@@ -1134,6 +1136,17 @@ class AccountInternal extends PureComponent<
   onCreateReconciliationTransaction = async (diff: number) => {
     const { accountId } = this.props;
     if (!accountId) {
+      return;
+    }
+
+    // The adjustment of a foreign currency account gets a value in the
+    // currency of the budget, and that needs the rate of today
+    const hasRates = await ensureAccountRatesOrNotify({
+      accountId,
+      dates: [currentDay()],
+      dispatch: this.props.dispatch,
+    });
+    if (!hasRates) {
       return;
     }
 

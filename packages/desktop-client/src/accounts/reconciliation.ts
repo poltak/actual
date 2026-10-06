@@ -73,7 +73,8 @@ export async function getClearedBalance(accountId: AccountEntity['id']) {
     q('transactions')
       .filter({ cleared: true, account: accountId })
       .options({ splits: 'none' })
-      .calculate({ $sum: '$amount' }),
+      // The balance of one account is in the currency of that account
+      .calculate({ $sum: '$native_amount' }),
   );
 
   return data ?? 0;

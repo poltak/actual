@@ -3,7 +3,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { useTranslation } from 'react-i18next';
 
 import { theme } from '@actual-app/components/theme';
 import { send } from '@actual-app/core/platform/client/connection';
@@ -43,6 +42,7 @@ import {
   toDbDiff,
   toView,
 } from '#transactions/accountCurrencyView';
+import { ensureRatesOrNotify } from '#transactions/exchangeRates';
 
 import { TableCurrencyProvider } from './table/TableCurrencyContext';
 import { shouldApplyRuleChange } from './table/utils';
@@ -193,7 +193,6 @@ export function TransactionList({
   // On the page of a foreign currency account, the rows are in the view
   // form: `amount` holds the amount in the currency of the account. See
   // `accountCurrencyView`. All other pages work as before.
-  const { t } = useTranslation();
   const { baseCurrency, foreignCurrencyOf } = useAccountCurrencies();
   const pageCurrency = foreignCurrencyOf(account?.id);
   const hasViewRows = pageCurrency != null;
@@ -231,23 +230,8 @@ export function TransactionList({
         foreignCurrencyOf,
         baseCurrency,
       });
-      if (requests.length > 0) {
-        const { missing } = await send('rates-ensure', { requests });
-        if (missing.length > 0) {
-          const { from, date } = missing[0];
-          dispatch(
-            addNotification({
-              notification: {
-                type: 'error',
-                message: t(
-                  'No exchange rate for {{currency}} on {{date}} is available, so the transaction was not saved. Turn on "Download exchange rates" in the settings.',
-                  { currency: from, date },
-                ),
-              },
-            }),
-          );
-          return null;
-        }
+      if (!(await ensureRatesOrNotify({ requests, dispatch }))) {
+        return null;
       }
 
       return toDbDiff({
@@ -258,7 +242,7 @@ export function TransactionList({
         accountOf,
       });
     },
-    [baseCurrency, dispatch, foreignCurrencyOf, payees, t],
+    [baseCurrency, dispatch, foreignCurrencyOf, payees],
   );
 
   const onAdd = useCallback(

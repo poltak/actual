@@ -1,6 +1,7 @@
 import * as asyncStorage from '#platform/server/asyncStorage';
 import * as fs from '#platform/server/fs';
 import { createApp } from '#server/app';
+import { getForeignCurrencies } from '#server/currencies/base-currency';
 import * as db from '#server/db';
 import { PostError } from '#server/errors';
 import { resetFormulaPreferencesCache } from '#server/formulas/bootstrap';
@@ -53,6 +54,17 @@ async function saveSyncedPrefs({
 }) {
   if (!id) {
     return;
+  }
+
+  if (id === 'defaultCurrencyCode') {
+    // Each stored `amount` is in the currency of the budget. A new
+    // currency would need a conversion of all of them.
+    const { baseCurrency, foreignCurrencies } = await getForeignCurrencies();
+    if (foreignCurrencies.size > 0 && (value || null) !== baseCurrency) {
+      throw new Error(
+        'The currency of the budget cannot change while an account has a different currency',
+      );
+    }
   }
 
   await db.update('preferences', {

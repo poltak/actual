@@ -155,7 +155,13 @@ export function resolveRowAmounts({
   }
 
   if (native == null) {
-    return { ok: false, reason: 'missing-native-amount' };
+    if (sentBase !== undefined) {
+      // A value in the base currency with no amount in the account
+      return { ok: false, reason: 'missing-native-amount' };
+    }
+    // A new row with no amount at all, as a screen saves it before the
+    // user types one
+    native = 0;
   }
 
   const resolved = (amount: IntegerAmount, isLocked: boolean) =>

@@ -40,6 +40,11 @@ export const schema = {
     account: f('id', { ref: 'accounts', required: true }),
     category: f('id', { ref: 'categories' }),
     amount: f('integer', { default: 0, required: true }),
+    // The amount in the currency of the account. `amount` is always in
+    // the base currency of the budget.
+    native_amount: f('integer'),
+    // True when a person set `amount` by hand for a foreign currency row
+    amount_locked: f('boolean'),
     payee: f('id', { ref: 'payees' }),
     notes: f('string'),
     date: f('date', { required: true }),
@@ -79,6 +84,18 @@ export const schema = {
     last_sync: f('string'),
     bank_sync_status: f('string'),
     account_group_id: f('id', { ref: 'account_groups' }),
+    // ISO code. Null means the base currency of the budget.
+    currency: f('string'),
+  },
+  exchange_rates: {
+    id: f('id'),
+    from_currency: f('string', { required: true }),
+    to_currency: f('string', { required: true }),
+    date: f('date', { required: true }),
+    // Units of `to_currency` for one unit of `from_currency`
+    rate: f('float', { required: true }),
+    source: f('string'),
+    tombstone: f('boolean'),
   },
   account_groups: {
     id: f('id'),
@@ -388,6 +405,9 @@ export const schemaConfig: SchemaConfig = {
           payee: 'pm.targetId',
           category: `CASE WHEN _.isParent = 1 THEN NULL ELSE cm.transferId END`,
           amount: `IFNULL(_.amount, 0)`,
+          // A row in a base currency account stores no native amount
+          native_amount: `IFNULL(_.native_amount, IFNULL(_.amount, 0))`,
+          amount_locked: `IFNULL(_.amount_locked, 0)`,
           parent_id: 'CASE WHEN _.isChild = 0 THEN NULL ELSE _.parent_id END',
         });
 

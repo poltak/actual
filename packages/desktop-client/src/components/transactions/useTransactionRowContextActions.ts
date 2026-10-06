@@ -7,7 +7,10 @@ import {
   extractScheduleConds,
   scheduleIsRecurring,
 } from '@actual-app/core/shared/schedules';
-import { isPreviewId } from '@actual-app/core/shared/transactions';
+import {
+  isPreviewId,
+  isTemporaryId,
+} from '@actual-app/core/shared/transactions';
 import type { TransactionEntity } from '@actual-app/core/types/models';
 
 import type { ContextMenuItem } from '#contextmenu/types';
@@ -16,6 +19,9 @@ import { useSchedules } from '#hooks/useSchedules';
 import { useSelectedItems } from '#hooks/useSelected';
 import { pushModal } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
+import { getAmountFields } from '#transactions/amountFields';
+
+import { useTableCurrencies } from './table/TableCurrencyContext';
 
 type TransactionRowContextMenuProps = {
   rowRef: RefObject<HTMLElement | null>;
@@ -154,6 +160,26 @@ export function useTransactionRowContextActions({
     }
   }
 
+  // The dialog for the amounts that the exchange rate cannot know. It
+  // is for one stored transaction that has such an amount.
+  const { foreignCurrencyOf, transferAccountOf, onRefetch } =
+    useTableCurrencies();
+  const transferAccount = transaction.transfer_id
+    ? (transferAccountOf?.(transaction.payee) ?? null)
+    : null;
+  const amountFields = getAmountFields({
+    currency: foreignCurrencyOf(transaction.account),
+    hasPartner: transferAccount != null,
+    partnerCurrency: foreignCurrencyOf(transferAccount),
+  });
+  const canSetAmounts =
+    selectedIds.length === 1 &&
+    selectedIds[0] === transaction.id &&
+    !types.preview &&
+    !transaction.is_parent &&
+    !isTemporaryId(transaction.id) &&
+    (amountFields.hasOtherSideField || amountFields.hasBaseValueField);
+
   const scheduleActions: ContextMenuItem[] = [
     {
       name: 'view-schedule',
@@ -196,6 +222,20 @@ export function useTransactionRowContextActions({
       name: 'delete',
       text: t('Delete'),
       onClick: () => onDelete(selectedIds),
+    },
+    {
+      name: 'set-amounts',
+      text: t('Amounts in two currencies'),
+      onClick: () =>
+        dispatch(
+          pushModal({
+            modal: {
+              name: 'transaction-amounts',
+              options: { transactionId: transaction.id, onSaved: onRefetch },
+            },
+          }),
+        ),
+      hidden: !canSetAmounts,
     },
     {
       name: 'view-schedule',

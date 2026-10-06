@@ -35,6 +35,7 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { send } from '@actual-app/core/platform/client/connection';
 import { DEFAULT_MAX_DISTANCE_METERS } from '@actual-app/core/shared/constants';
+import { getDecimalPlaces } from '@actual-app/core/shared/currencies';
 import { calculateDistance } from '@actual-app/core/shared/location-utils';
 import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
@@ -55,7 +56,6 @@ import {
   getChangedValues,
   groupById,
   integerToAmount,
-  integerToCurrency,
   titleFirst,
 } from '@actual-app/core/shared/util';
 import type {
@@ -87,10 +87,16 @@ import {
   transactionForRulesFromList,
 } from '#components/transactions/applyRulesToTransaction';
 import {
+  TableCurrencyProvider,
+  useTableCurrencies,
+} from '#components/transactions/table/TableCurrencyContext';
+import {
+  formatAmount,
   getClearedFieldNames,
   shouldApplyRuleChange,
   trackClearedField,
 } from '#components/transactions/table/utils';
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { useAccounts } from '#hooks/useAccounts';
 import { useCategories } from '#hooks/useCategories';
 import { useDateFormat } from '#hooks/useDateFormat';
@@ -110,6 +116,12 @@ import { useSavePayeeLocationMutation } from '#payees';
 import { locationService } from '#payees/location';
 import { aqlQuery } from '#queries/aqlQuery';
 import { useDispatch, useSelector } from '#redux';
+import {
+  getRateRequests,
+  toDbDiff,
+  toView,
+} from '#transactions/accountCurrencyView';
+import { ensureRatesOrNotify } from '#transactions/exchangeRates';
 import { setLastTransaction } from '#transactions/transactionsSlice';
 import { getStatusLabel } from '#util/schedule';
 import {
@@ -125,15 +137,28 @@ function getFieldName(transactionId: TransactionEntity['id'], field: string) {
   return `${field}-${transactionId}`;
 }
 
+// The currency of the amounts in the form, when the transaction is in a
+// foreign currency account. The form then holds the amount in the
+// currency of that account. An integer amount has the decimal places of
+// its currency, and the form of the budget currency always uses two.
+function useFormCurrency() {
+  const { pageCurrency } = useTableCurrencies();
+  return {
+    currency: pageCurrency,
+    decimalPlaces: pageCurrency ? getDecimalPlaces(pageCurrency) : 2,
+  };
+}
+
 function serializeTransaction(
   transaction: TransactionEntity,
   dateFormat: string,
+  decimalPlaces = 2,
 ) {
   const { date, amount } = transaction;
   return {
     ...transaction,
     date: formatDate(parseISO(date), dateFormat),
-    amount: integerToAmount(amount || 0),
+    amount: integerToAmount(amount || 0, decimalPlaces),
   };
 }
 
@@ -141,6 +166,7 @@ function deserializeTransaction(
   transaction: TransactionEntity,
   originalTransaction: TransactionEntity | null,
   dateFormat: string,
+  decimalPlaces = 2,
 ) {
   const { amount, date: originalDate, ...realTransaction } = transaction;
 
@@ -174,7 +200,11 @@ function deserializeTransaction(
       monthUtils.currentDay();
   }
 
-  return { ...realTransaction, date, amount: amountToInteger(amount || 0) };
+  return {
+    ...realTransaction,
+    date,
+    amount: amountToInteger(amount || 0, decimalPlaces),
+  };
 }
 
 export function lookupName(items: CategoryEntity[], id?: CategoryEntity['id']) {
@@ -265,6 +295,7 @@ function Footer({
   onEditField,
   isFuture,
 }: FooterProps) {
+  const { currency } = useFormCurrency();
   const [transaction, ...childTransactions] = transactions;
   const emptySplitTransaction = childTransactions.find(t => t.amount === 0);
   const onClickRemainingSplit = () => {
@@ -329,10 +360,11 @@ function Footer({
               <Trans>
                 Add new split -{' '}
                 {{
-                  amount: integerToCurrency(
+                  amount: formatAmount(
                     transaction.amount > 0
                       ? transaction.error.difference
                       : -transaction.error.difference,
+                    currency,
                   ),
                 }}{' '}
                 left
@@ -341,10 +373,11 @@ function Footer({
               <Trans>
                 Amount left:{' '}
                 {{
-                  amount: integerToCurrency(
+                  amount: formatAmount(
                     transaction.amount > 0
                       ? transaction.error.difference
                       : -transaction.error.difference,
+                    currency,
                   ),
                 }}
               </Trans>
@@ -452,6 +485,7 @@ const ChildTransactionEdit = forwardRef<
     },
     ref,
   ) => {
+    const { currency } = useFormCurrency();
     const { t } = useTranslation();
     const { editingField, onRequestActiveEdit, onClearActiveEdit } =
       useSingleActiveEditForm()!;
@@ -505,6 +539,7 @@ const ChildTransactionEdit = forwardRef<
           >
             <FieldLabel title={t('Amount')} style={{ padding: 0 }} />
             <SplitAmountInput
+              currency={currency}
               keyboardHeader={keyboardHeader}
               disabled={
                 !!editingField &&
@@ -657,12 +692,13 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
     const [upcomingLength = DEFAULT_UPCOMING_SCHEDULE_DAYS] = useSyncedPref(
       'upcomingScheduledTransactionLength',
     );
+    const { currency, decimalPlaces } = useFormCurrency();
     const transactions = useMemo(
       () =>
         unserializedTransactions.map(t =>
-          serializeTransaction(t, dateFormat),
+          serializeTransaction(t, dateFormat, decimalPlaces),
         ) || [],
-      [unserializedTransactions, dateFormat],
+      [unserializedTransactions, dateFormat, decimalPlaces],
     );
     const { data: { grouped: categoryGroups } = { grouped: [] } } =
       useCategories();
@@ -1246,6 +1282,7 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
             <FieldLabel title={t('Amount')} flush style={{ marginBottom: 0 }} />
             <AmountInput
               value={transaction.amount}
+              currency={currency}
               negate
               disabled={
                 !!editingField &&
@@ -1418,7 +1455,7 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
                     void onUpdateInner(
                       childTrans,
                       'amount',
-                      integerToAmount(remaining),
+                      integerToAmount(remaining, decimalPlaces),
                     );
                   }}
                 />
@@ -1625,6 +1662,18 @@ function TransactionEditUnconnected({
   const [learnCategories = 'true'] = useSyncedPref('learn-categories');
   const isLearnCategoriesEnabled = String(learnCategories) === 'true';
 
+  // A transaction in a foreign currency account is in the form with the
+  // amount in the currency of that account. See `accountCurrencyView`.
+  const {
+    baseCurrency,
+    foreignCurrencyOf,
+    isPending: isAccountsPending,
+  } = useAccountCurrencies();
+  const foreignCurrencyOfRef = useRef(foreignCurrencyOf);
+  foreignCurrencyOfRef.current = foreignCurrencyOf;
+  const formCurrency = foreignCurrencyOf(transactions[0]?.account);
+  const formDecimalPlaces = formCurrency ? getDecimalPlaces(formCurrency) : 2;
+
   const searchParamCategory = useMemo(
     () => categories.find(c => c.name === searchParams.get('category'))?.id,
     [categories, searchParams],
@@ -1670,13 +1719,19 @@ function TransactionEditUnconnected({
       );
 
       if (!unmounted) {
-        const fetchedTransactions = ungroupTransactions(data);
+        const fetchedTransactions = ungroupTransactions(data).map(row =>
+          foreignCurrencyOfRef.current(row.account) ? toView(row) : row,
+        );
         setTransactions(fetchedTransactions);
         setFetchedTransactions(fetchedTransactions);
       }
     }
     if (transactionId !== 'new') {
-      void fetchTransaction();
+      // The currency of the account must be known before the rows go
+      // into the form
+      if (!isAccountsPending) {
+        void fetchTransaction();
+      }
     } else {
       isAdding.current = true;
     }
@@ -1684,7 +1739,7 @@ function TransactionEditUnconnected({
     return () => {
       unmounted = true;
     };
-  }, [transactionId]);
+  }, [transactionId, isAccountsPending]);
 
   useEffect(() => {
     if (!isLocationGranted) {
@@ -1744,6 +1799,7 @@ function TransactionEditUnconnected({
         serializedTransaction,
         null,
         dateFormat,
+        formDecimalPlaces,
       );
 
       // Run the rules to auto-fill in any data. Right now we only do
@@ -1896,7 +1952,7 @@ function TransactionEditUnconnected({
         }
       }
     },
-    [dateFormat, isLocationGranted],
+    [dateFormat, isLocationGranted, formDecimalPlaces],
   );
 
   const onSave = useCallback(
@@ -1911,10 +1967,32 @@ function TransactionEditUnconnected({
         changes.updated.length > 0 ||
         changes.deleted.length
       ) {
-        const _remoteUpdates = await send('transactions-batch-update', {
+        // The rows of a foreign currency account go to the server with
+        // native amounts, after the page got the rates that it needs
+        const accountOf = (id: string | undefined) =>
+          newTransactions.find(row => row.id === id)?.account;
+        const requests = getRateRequests({
           added: changes.added,
-          deleted: changes.deleted,
           updated: changes.updated,
+          dateOf: id => newTransactions.find(row => row.id === id)?.date,
+          accountOf,
+          payees,
+          foreignCurrencyOf,
+          baseCurrency,
+        });
+        if (!(await ensureRatesOrNotify({ requests, dispatch }))) {
+          return;
+        }
+        const diff = toDbDiff({
+          diff: changes,
+          isInViewForm: account => foreignCurrencyOf(account) != null,
+          accountOf,
+        });
+
+        const _remoteUpdates = await send('transactions-batch-update', {
+          added: diff.added,
+          deleted: diff.deleted,
+          updated: diff.updated,
           learnCategories: isLearnCategoriesEnabled,
         });
 
@@ -1932,7 +2010,14 @@ function TransactionEditUnconnected({
         dispatch(setLastTransaction({ transaction: newTransactions[0] }));
       }
     },
-    [dispatch, fetchedTransactions, isLearnCategoriesEnabled],
+    [
+      dispatch,
+      fetchedTransactions,
+      isLearnCategoriesEnabled,
+      payees,
+      foreignCurrencyOf,
+      baseCurrency,
+    ],
   );
 
   const onDelete = useCallback(
@@ -2005,11 +2090,11 @@ function TransactionEditUnconnected({
     }
 
     const updated = {
-      ...serializeTransaction(transaction, dateFormat),
+      ...serializeTransaction(transaction, dateFormat, formDecimalPlaces),
       payee: nearestPayee.id,
     };
     void onUpdate(updated, 'payee');
-  }, [transactions, nearestPayee, onUpdate, dateFormat]);
+  }, [transactions, nearestPayee, onUpdate, dateFormat, formDecimalPlaces]);
 
   if (accounts.length === 0) {
     return (
@@ -2124,24 +2209,31 @@ function TransactionEditUnconnected({
         backgroundColor: theme.pageBackground,
       }}
     >
-      <TransactionEditInner
-        transactions={transactions}
-        isAdding={isAdding.current}
-        categories={categories}
-        accounts={accounts}
-        payees={payees}
-        dateFormat={dateFormat}
-        onUpdate={onUpdate}
-        onSave={onSave}
-        onDelete={onDelete}
-        onSplit={onSplit}
-        onAddSplit={onAddSplit}
-        shouldShowSaveLocation={shouldShowSaveLocation}
-        onSaveLocation={onSaveLocation}
-        onSelectNearestPayee={onSelectNearestPayee}
-        nearestPayee={isLocationGranted ? nearestPayee : null}
-        onRequestLocation={shouldPromptLocation ? requestPermission : undefined}
-      />
+      <TableCurrencyProvider
+        pageCurrency={formCurrency}
+        foreignCurrencyOf={foreignCurrencyOf}
+      >
+        <TransactionEditInner
+          transactions={transactions}
+          isAdding={isAdding.current}
+          categories={categories}
+          accounts={accounts}
+          payees={payees}
+          dateFormat={dateFormat}
+          onUpdate={onUpdate}
+          onSave={onSave}
+          onDelete={onDelete}
+          onSplit={onSplit}
+          onAddSplit={onAddSplit}
+          shouldShowSaveLocation={shouldShowSaveLocation}
+          onSaveLocation={onSaveLocation}
+          onSelectNearestPayee={onSelectNearestPayee}
+          nearestPayee={isLocationGranted ? nearestPayee : null}
+          onRequestLocation={
+            shouldPromptLocation ? requestPermission : undefined
+          }
+        />
+      </TableCurrencyProvider>
     </View>
   );
 }
@@ -2175,6 +2267,7 @@ function FillRemainingButton({
   readonly remaining: number;
   readonly onPress: () => void;
 }) {
+  const { currency } = useFormCurrency();
   return (
     <Button
       variant="primary"
@@ -2192,7 +2285,7 @@ function FillRemainingButton({
         <Trans>
           Use remaining:{' '}
           {{
-            amount: integerToCurrency(Math.abs(remaining)),
+            amount: formatAmount(Math.abs(remaining), currency),
           }}
         </Trans>
       </Text>

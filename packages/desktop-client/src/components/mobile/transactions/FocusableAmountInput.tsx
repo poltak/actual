@@ -25,8 +25,11 @@ import { useFormat } from '#hooks/useFormat';
 import { useMergedRefs } from '#hooks/useMergedRefs';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 
+
 type AmountInputProps = {
   value: number;
+  // The currency of the amount when it is not the currency of the budget
+  currency?: string | null;
   focused?: boolean;
   style?: CSSProperties;
   textStyle?: CSSProperties;
@@ -43,6 +46,7 @@ const AmountInput = memo(function AmountInput({
   focused,
   style,
   textStyle,
+  currency,
   ...props
 }: AmountInputProps) {
   const [editing, setEditing] = useState(false);
@@ -50,7 +54,7 @@ const AmountInput = memo(function AmountInput({
   const [value, setValue] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const [hideFraction] = useSyncedPref('hideFraction');
-  const format = useFormat();
+  const format = useFormat(currency);
 
   const mergedInputRef = useMergedRefs<HTMLInputElement>(
     props.inputRef,
@@ -125,7 +129,7 @@ const AmountInput = memo(function AmountInput({
     } else {
       text = appendDecimals(
         reapplyThousandSeparators(text),
-        String(hideFraction) === 'true',
+        !currency && String(hideFraction) === 'true',
       );
     }
     setEditing(true);
@@ -203,9 +207,10 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
   onFocus,
   onBlur,
   onChangeValue,
+  currency,
   ...props
 }: FocusableAmountInputProps) {
-  const format = useFormat();
+  const format = useFormat(currency);
   const [isNegative, setIsNegative] = useState(true);
   const [liveValue, setLiveValue] = useState(Math.abs(value));
   const [prevValue, setPrevValue] = useState(value);
@@ -250,6 +255,7 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
       <AmountInput
         {...props}
         value={value}
+        currency={currency}
         onFocus={onFocus}
         onBlur={onBlur}
         onChangeValue={handleChangeValue}

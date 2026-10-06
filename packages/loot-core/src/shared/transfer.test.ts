@@ -72,4 +72,46 @@ describe('Transfer', () => {
       ),
     ).toBeFalsy();
   });
+
+  test('Transfers between currencies are verified by the amounts of the accounts', async () => {
+    const usdOut = { id: 'a', account: 'usd', date: '2017-01-01' };
+    const vndIn = { id: 'b', account: 'vnd', date: '2017-01-01' };
+
+    // 10.00 USD left, 250,000.00 VND arrived. The base values differ,
+    // because each row was converted on its own.
+    expect(
+      transfer.validForTransfer(
+        { ...usdOut, amount: -25480000, native_amount: -1000 },
+        { ...vndIn, amount: 25000000, native_amount: 25000000 },
+        { fromCurrency: 'USD', toCurrency: null },
+      ),
+    ).toBeTruthy();
+
+    // the two rows go in the same direction
+    expect(
+      transfer.validForTransfer(
+        { ...usdOut, amount: -25480000, native_amount: -1000 },
+        { ...vndIn, amount: -25000000, native_amount: -25000000 },
+        { fromCurrency: 'USD', toCurrency: null },
+      ),
+    ).toBeFalsy();
+
+    // two accounts in the same foreign currency must zero each other
+    // out in that currency, also when the base values differ
+    const usdIn = { id: 'c', account: 'usd-2', date: '2017-01-02' };
+    expect(
+      transfer.validForTransfer(
+        { ...usdOut, amount: -25000000, native_amount: -1000 },
+        { ...usdIn, amount: 25100000, native_amount: 1000 },
+        { fromCurrency: 'USD', toCurrency: 'USD' },
+      ),
+    ).toBeTruthy();
+    expect(
+      transfer.validForTransfer(
+        { ...usdOut, amount: -25000000, native_amount: -1000 },
+        { ...usdIn, amount: 25000000, native_amount: 996 },
+        { fromCurrency: 'USD', toCurrency: 'USD' },
+      ),
+    ).toBeFalsy();
+  });
 });

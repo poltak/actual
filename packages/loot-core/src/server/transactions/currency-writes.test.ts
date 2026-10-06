@@ -547,4 +547,62 @@ describe('a transfer between two currencies', () => {
       native_amount: null,
     });
   });
+
+  it('gives two rows one base value when a write links them as a transfer', async () => {
+    // The user typed the two sides as two rows, and then picks "Make transfer"
+    await batchUpdateTransactions({
+      added: [
+        { id: 'out', account: 'wise-usd', amount: -1000, date: DAY },
+        { id: 'in', account: 'bank', amount: 2600000000, date: DAY },
+      ],
+    });
+    expect(await row('out')).toMatchObject({ amount: -25000000 });
+
+    await batchUpdateTransactions({
+      updated: [
+        { id: 'out', payee: 'to-bank', transfer_id: 'in' },
+        { id: 'in', payee: 'to-wise-usd', transfer_id: 'out' },
+      ],
+      runTransfers: false,
+    });
+
+    // The side in the base currency decides
+    expect(await row('in')).toMatchObject({
+      amount: 2600000000,
+      native_amount: null,
+    });
+    expect(await row('out')).toMatchObject({
+      amount: -2600000000,
+      native_amount: -1000,
+    });
+  });
+
+  it('gives two rows in the same foreign currency one base value when a write links them', async () => {
+    // The two rows have two dates, so the rate gave them two base values
+    await batchUpdateTransactions({
+      added: [
+        { id: 'out', account: 'wise-usd', amount: -1000, date: DAY },
+        { id: 'in', account: 'wise-usd-2', amount: 1000, date: NEXT_DAY },
+      ],
+    });
+    expect(await row('in')).toMatchObject({ amount: 25100000 });
+
+    await batchUpdateTransactions({
+      updated: [
+        { id: 'out', payee: 'to-wise-usd-2', transfer_id: 'in' },
+        { id: 'in', payee: 'to-wise-usd', transfer_id: 'out' },
+      ],
+      runTransfers: false,
+    });
+
+    // The side that the money leaves decides
+    expect(await row('out')).toMatchObject({
+      amount: -25000000,
+      native_amount: -1000,
+    });
+    expect(await row('in')).toMatchObject({
+      amount: 25000000,
+      native_amount: 1000,
+    });
+  });
 });

@@ -36,6 +36,17 @@ export type DbAccount = {
     | 'account-missing'
     | null;
   account_group_id?: DbAccountGroup['id'] | null;
+  currency?: string | null;
+};
+
+export type DbExchangeRate = {
+  id: string;
+  from_currency: string;
+  to_currency: string;
+  date: number;
+  rate: number;
+  source?: string | null;
+  tombstone: 1 | 0;
 };
 
 export type DbAccountGroup = {
@@ -192,6 +203,8 @@ export type DbTransaction = {
   date: number;
   acct: DbAccount['id'];
   amount: number;
+  native_amount?: number | null;
+  amount_locked?: 1 | 0 | null;
   sort_order: number;
   parent_id?: DbTransaction['id'] | null;
   category?: DbCategory['id'] | null;
@@ -301,6 +314,8 @@ export type DbViewTransactionInternal = {
   date: DbTransaction['date'];
   account: DbAccount['id'];
   amount: DbTransaction['amount'];
+  native_amount: number;
+  amount_locked: 1 | 0;
   parent_id: DbTransaction['parent_id'] | null;
   category: DbCategory['id'] | null;
   payee: DbPayee['id'] | null;

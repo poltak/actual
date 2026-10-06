@@ -12,7 +12,13 @@ export type TransactionEntity = {
   parent_id?: TransactionEntity['id'];
   account: AccountEntity['id'];
   category?: CategoryEntity['id'];
+  // Always in the base currency of the budget
   amount: IntegerAmount;
+  // The amount in the currency of the account. A query gives `amount`
+  // here for a row in a base currency account.
+  native_amount?: IntegerAmount | null;
+  // True when a person set `amount` by hand for a foreign currency row
+  amount_locked?: boolean;
   payee?: PayeeEntity['id'] | null;
   notes?: string;
   date: string;

@@ -13,6 +13,12 @@ import type {
   APITagEntity,
 } from '#server/api-models';
 import type { BudgetFileHandlers } from '#server/budgetfiles/app';
+import type { AccountMarketValue } from '#server/currencies/market-value';
+import type {
+  RateRequest,
+  RateRow,
+  StoredRate,
+} from '#server/currencies/rates';
 import type { batchUpdateTransactions } from '#server/transactions';
 import type { QueryState } from '#shared/query';
 
@@ -170,6 +176,24 @@ export type ApiHandlers = {
     id: APIAccountEntity['id'];
     cutoff?: Date;
   }) => Promise<number>;
+
+  'api/account-market-value': (arg: {
+    id: APIAccountEntity['id'];
+  }) => Promise<AccountMarketValue>;
+
+  'api/account-revalue': (arg: {
+    id: APIAccountEntity['id'];
+    category?: APICategoryEntity['id'] | null;
+    notes?: string | null;
+  }) => Promise<TransactionEntity['id'] | null>;
+
+  'api/exchange-rates-ensure': (arg: {
+    requests: RateRequest[];
+  }) => Promise<{ missing: RateRequest[] }>;
+
+  'api/exchange-rates-save': (arg: { rates: RateRow[] }) => Promise<void>;
+
+  'api/exchange-rate-get': (arg: RateRequest) => Promise<StoredRate | null>;
 
   'api/account-groups-get': () => Promise<APIAccountGroupEntity[]>;
 

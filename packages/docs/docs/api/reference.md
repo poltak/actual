@@ -32,7 +32,15 @@ import APIList from './APIList';
 "closeAccount",
 "reopenAccount",
 "deleteAccount",
-"getAccountBalance"
+"getAccountBalance",
+"getAccountMarketValue",
+"revalueAccount"
+]} />
+
+<APIList title="Exchange Rates" sections={[
+"ensureExchangeRates",
+"saveExchangeRates",
+"getExchangeRate"
 ]} />
 
 <APIList title="Categories" sections={[
@@ -247,6 +255,44 @@ Existing transfers will have the `transfer_id` field which points to the transac
 
 If you want to create a transfer, use the transfer payee for the account you wish to transfer to/from. Load the payees, use the [`transfer_acct`](#payee) field of the payee to find the account you want to transfer to/from, and assign that payee to the transaction. A transfer with a transaction in both accounts will be created. (See [transfer payees](#transfers-1).)
 
+#### Multiple currencies
+
+An account can have a currency that is not the currency of the budget. This page calls it a foreign currency account. Set the [`currency`](#account) field when you create the account. The budget must have a currency first, which is the preference `defaultCurrencyCode`.
+
+A transaction in a foreign currency account has two amounts:
+
+- `native_amount` is the amount in the currency of the account. The account page shows this number.
+- `amount` is the value in the currency of the budget. The budget and the reports add this number.
+
+When you add a transaction to a foreign currency account, the fields that you send decide the result:
+
+- With only `amount`, the number is in the currency of the account. The API converts it with the exchange rate of the transaction date.
+- With only `native_amount`, the result is the same.
+- With `native_amount` and `amount`, the API stores the two numbers as you sent them and sets `amount_locked`. Use this when you know the real value, for example from a bank statement.
+
+`updateTransaction` refuses an `amount` with no `native_amount` for a transaction in a foreign currency account. Send `native_amount` to change the amount in the account. Send the two fields to set the value in the currency of the budget.
+
+A conversion needs a stored [exchange rate](#exchange-rates) for the date of the transaction, or for a date at most 7 days from it. With no such rate, the call fails. Call [`ensureExchangeRates`](#ensureexchangerates) or [`saveExchangeRates`](#saveexchangerates) before you add the transactions.
+
+For a transfer between two currencies, each side has its own real amount. Add the transaction to one account with the transfer payee of the other account, and put the amount of the other account in `_transfer_native_amount`.
+
+```js
+// The budget is in EUR. 100.00 USD left the USD account, and
+// 91.50 EUR arrived in the EUR account.
+await api.addTransactions(
+  eurAccountId,
+  [
+    {
+      date: '2026-03-01',
+      amount: 9150,
+      payee: transferPayeeOfUsdAccount,
+      _transfer_native_amount: -10000,
+    },
+  ],
+  { runTransfers: true },
+);
+```
+
 #### Methods
 
 #### `addTransactions`
@@ -423,7 +469,33 @@ Delete an account.
 
 <Method name="getAccountBalance" args={[{ name: 'id', type: 'id' }, { name: 'cutoff', type: 'Date?'}]} returns="Promise<number>" />
 
-Gets the balance for an account. If a cutoff is given, it gives the account balance as of that date. If no cutoff is given, it uses the current date as the cutoff.
+Gets the balance for an account. If a cutoff is given, it gives the account balance as of that date. If no cutoff is given, it uses the current date as the cutoff. The balance is in the currency of the account.
+
+#### `getAccountMarketValue`
+
+<Method name="getAccountMarketValue" args={[{ name: 'id', type: 'id' }]} returns="Promise<object>" />
+
+Compares the balance of an account at the exchange rate of today with the value that its transactions store. Each transaction keeps the value of its date, so the two numbers are different after the rate changes.
+
+This method returns an object with the following fields:
+
+- `currency`: the currency of the account, or `null` for the currency of the budget
+- `baseCurrency`: the currency of the budget
+- `balance`: the balance in the currency of the account
+- `storedValue`: the sum of the `amount` of the transactions
+- `marketValue`: the balance at the rate of today, or `null` when no rate is stored
+- `difference`: `marketValue` minus `storedValue`, or `null` when no rate is stored
+- `rate`: the rate that gave the market value, or `null`
+
+#### `revalueAccount`
+
+<Method name="revalueAccount" args={[{ name: 'id', type: 'id' }, { name: 'options = {}', type: 'object?' }]} returns="Promise<id | null>" />
+
+Adds one transaction with the `difference` that `getAccountMarketValue` gives. After that, the stored value of the account is equal to its market value. The transaction has a `native_amount` of 0, so the balance in the currency of the account does not change.
+
+`options` can have a `category` id and a `notes` string for the new transaction.
+
+Returns the `id` of the new transaction, or `null` when the difference is 0.
 
 #### Examples
 
@@ -438,6 +510,53 @@ createAccount({
 // Get all accounts
 
 let accounts = await getAccounts();
+```
+
+## Exchange Rates
+
+A rate says how many units of the currency `to` you get for one unit of the currency `from` on a date. The API uses the rates to convert the amount of a transaction in a foreign currency account to the currency of the budget. See [multiple currencies](#multiple-currencies).
+
+#### Methods
+
+#### `ensureExchangeRates`
+
+<Method name="ensureExchangeRates" args={[{ name: 'requests', type: 'object[]' }]} returns="Promise<{ missing }>" />
+
+Makes sure that a rate is stored for each request. A request is an object with the fields `from`, `to`, and `date`.
+
+If the preference `exchangeRateProvider` names a rate provider, this method downloads the rates that are not stored. With no provider, it downloads nothing.
+
+`missing` is an array of the requests that have no usable rate after the call.
+
+#### `saveExchangeRates`
+
+<Method name="saveExchangeRates" args={[{ name: 'rates', type: 'object[]' }]} />
+
+Stores rates that you have. A rate is an object with the fields `from`, `to`, `date`, and `rate`. A rate for the same two currencies and the same date replaces the stored one.
+
+#### `getExchangeRate`
+
+<Method name="getExchangeRate" args={[{ name: 'request', type: 'object' }]} returns="Promise<object | null>" />
+
+Reads the stored rate for a request with the fields `from`, `to`, and `date`. If the date has no rate, the result is the rate of the nearest date within 7 days.
+
+This method returns `null` when no such rate is stored. If not, it returns an object with the following fields:
+
+- `rate`: the rate
+- `date`: the date of the stored rate
+- `isExactDate`: `false` when the rate comes from a different date
+- `source`: where the rate came from, such as `manual` or `frankfurter`
+
+#### Examples
+
+```js
+// Store a rate, then add a transaction of 12.50 USD
+await api.saveExchangeRates([
+  { from: 'USD', to: 'EUR', date: '2026-03-01', rate: 0.915 },
+]);
+await api.addTransactions(usdAccountId, [
+  { date: '2026-03-01', amount: -1250 },
+]);
 ```
 
 ## Account Groups

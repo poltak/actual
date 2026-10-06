@@ -10,6 +10,10 @@ import type {
   APIScheduleEntity,
   APITagEntity,
 } from '@actual-app/core/server/api-models';
+import type {
+  RateRequest,
+  RateRow,
+} from '@actual-app/core/server/currencies/rates';
 import type { ImportableBudgetType } from '@actual-app/core/server/importers/index';
 import type { Query } from '@actual-app/core/shared/query';
 import type { ImportTransactionsOpts } from '@actual-app/core/types/api-handlers';
@@ -259,6 +263,46 @@ export function deleteAccount(id: APIAccountEntity['id']) {
 
 export function getAccountBalance(id: APIAccountEntity['id'], cutoff?: Date) {
   return send('api/account-balance', { id, cutoff });
+}
+
+/**
+ * Compares the balance of an account at the exchange rate of today
+ * with the value that its transactions store.
+ */
+export function getAccountMarketValue(id: APIAccountEntity['id']) {
+  return send('api/account-market-value', { id });
+}
+
+/**
+ * Adds one transaction that makes the stored value of a foreign
+ * currency account equal to its market value.
+ */
+export function revalueAccount(
+  id: APIAccountEntity['id'],
+  {
+    category,
+    notes,
+  }: { category?: APICategoryEntity['id'] | null; notes?: string | null } = {},
+) {
+  return send('api/account-revalue', { id, category, notes });
+}
+
+/**
+ * Makes sure that a rate is stored for each request. Downloads the
+ * rates that are not there, if the budget has a rate provider.
+ */
+export function ensureExchangeRates(requests: RateRequest[]) {
+  return send('api/exchange-rates-ensure', { requests });
+}
+
+/** Stores exchange rates that the caller has. */
+export function saveExchangeRates(rates: RateRow[]) {
+  return send('api/exchange-rates-save', { rates });
+}
+
+/** Reads the stored rate for a date, or the nearest one within 7 days. */
+export function getExchangeRate(request: RateRequest) {
+  return send('api/exchange-rate-get', request);
 }
 
 export function getAccountGroups() {

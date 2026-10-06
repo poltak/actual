@@ -1306,3 +1306,83 @@ describe('API preferences: setPreference', () => {
     );
   });
 });
+
+describe('API multiple currencies', () => {
+  // The budget is in VND, stored times 100. With IS_TESTING, today is
+  // 2017-01-01.
+  const day = '2016-12-10';
+  const today = '2017-01-01';
+
+  beforeEach(async () => {
+    await api.loadBudget(budgetName);
+    await api.setPreference('defaultCurrencyCode', 'VND');
+    await api.saveExchangeRates([
+      { from: 'USD', to: 'VND', date: day, rate: 25000 },
+      { from: 'USD', to: 'VND', date: today, rate: 26000 },
+    ]);
+  });
+
+  // apis: saveExchangeRates, getExchangeRate, ensureExchangeRates
+  test('Exchange rates: successfully store and read rates', async () => {
+    expect(
+      await api.getExchangeRate({ from: 'USD', to: 'VND', date: day }),
+    ).toMatchObject({ rate: 25000, date: day });
+
+    const absent = { from: 'USD', to: 'VND', date: '2016-06-01' };
+    expect(await api.ensureExchangeRates([absent])).toEqual({
+      missing: [absent],
+    });
+  });
+
+  // apis: createAccount, addTransactions, getTransactions,
+  // updateTransaction, getAccountBalance
+  test('Transactions: successfully keep two amounts in a foreign currency account', async () => {
+    const usd = await api.createAccount({ name: 'usd', currency: 'USD' }, 0);
+    expect(await api.getAccounts()).toContainEqual(
+      expect.objectContaining({ id: usd, currency: 'USD' }),
+    );
+
+    await api.addTransactions(usd, [{ date: day, amount: -1000 }]);
+
+    let transactions = await api.getTransactions(usd, day, day);
+    expect(transactions).toEqual([
+      expect.objectContaining({ amount: -25000000, native_amount: -1000 }),
+    ]);
+    // The balance is in the currency of the account
+    expect(await api.getAccountBalance(usd)).toEqual(-1000);
+
+    const { id } = transactions[0];
+    await expect(api.updateTransaction(id, { amount: -2000 })).rejects.toThrow(
+      'Send `native_amount`',
+    );
+    await api.updateTransaction(id, { native_amount: -2000 });
+
+    transactions = await api.getTransactions(usd, day, day);
+    expect(transactions).toEqual([
+      expect.objectContaining({ amount: -50000000, native_amount: -2000 }),
+    ]);
+  });
+
+  // apis: getAccountMarketValue, revalueAccount
+  test('Accounts: successfully book the exchange difference', async () => {
+    const usd = await api.createAccount({ name: 'usd', currency: 'USD' }, 0);
+    await api.addTransactions(usd, [{ date: day, amount: 10000 }]);
+
+    expect(await api.getAccountMarketValue(usd)).toMatchObject({
+      currency: 'USD',
+      balance: 10000,
+      storedValue: 250000000,
+      marketValue: 260000000,
+      difference: 10000000,
+    });
+
+    const id = await api.revalueAccount(usd, { notes: 'Exchange difference' });
+
+    expect(id).toEqual(expect.any(String));
+    expect(await api.getAccountMarketValue(usd)).toMatchObject({
+      balance: 10000,
+      storedValue: 260000000,
+      difference: 0,
+    });
+  });
+});

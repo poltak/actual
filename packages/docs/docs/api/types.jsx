@@ -71,6 +71,42 @@ export const objects = {
     { name: 'date', type: 'date', required: true },
     { name: 'amount', type: types.amount },
     {
+      name: 'native_amount',
+      type: types.amount,
+      description: (
+        <span>
+          The amount in the currency of the account. For an account in the
+          currency of the budget it is equal to <code>amount</code>. See{' '}
+          <a href="#multiple-currencies">multiple currencies</a>.
+        </span>
+      ),
+    },
+    {
+      name: 'amount_locked',
+      type: 'boolean',
+      description: (
+        <span>
+          <code>true</code> when <code>amount</code> was set directly for a
+          transaction in a foreign currency account. A locked amount does not
+          change when the exchange rate or the date changes.
+        </span>
+      ),
+    },
+    {
+      name: '_transfer_native_amount',
+      type: types.amount,
+      description: (
+        <div>
+          <div className="mb-6">
+            For a new transfer between two currencies, the amount in the
+            currency of the account on the other side. See{' '}
+            <a href="#multiple-currencies">multiple currencies</a>.
+          </div>
+          * Only available in a <a href="#types-of-methods">create</a> request
+        </div>
+      ),
+    },
+    {
       name: 'payee',
       type: types.id,
       description: (
@@ -178,6 +214,18 @@ export const objects = {
         <span>
           The <a href="#account-group">account group</a> this account belongs
           to. Defaults to <code>null</code>
+        </span>
+      ),
+    },
+    {
+      name: 'currency',
+      type: 'string | null',
+      description: (
+        <span>
+          The ISO code of the currency of the account, such as <code>USD</code>.{' '}
+          <code>null</code> means the currency of the budget. You can set it
+          only when you create the account. See{' '}
+          <a href="#multiple-currencies">multiple currencies</a>.
         </span>
       ),
     },

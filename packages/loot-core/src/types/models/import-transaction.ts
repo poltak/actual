@@ -13,6 +13,16 @@ export type ImportTransactionEntity = {
    * For example, USD amount of $120.30 would be 12030 */
   amount?: number;
 
+  /** Only for an account in a currency that is not the currency of the budget.
+   * The amount in the currency of the account. When this is given, `amount` is
+   * the value in the currency of the budget, and it is optional */
+  native_amount?: number | null;
+
+  /** Only for a new transfer between two currencies: the amount in the
+   * currency of the account on the other side. It is not stored on this
+   * transaction */
+  _transfer_native_amount?: number | null;
+
   /** In a create/import request, this overrides payee_name.
    * Should be an existing payee ID */
   payee?: string | null;

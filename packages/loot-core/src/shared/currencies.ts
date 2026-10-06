@@ -83,3 +83,31 @@ export function getCurrency(code: string): Currency {
 export function getDecimalPlaces(currencyCode: string): number {
   return getCurrency(currencyCode)?.decimalPlaces ?? 2;
 }
+
+/**
+ * True when an account holds a currency that is not the currency of the
+ * budget. An account with no currency is in the currency of the budget.
+ */
+export function isForeignCurrency({
+  currency,
+  baseCurrency,
+}: {
+  currency: string | null | undefined;
+  baseCurrency: string | null | undefined;
+}): boolean {
+  return currency != null && currency !== '' && currency !== baseCurrency;
+}
+
+// Stored with 2 decimal places, but written with none in daily use
+const CURRENCIES_SHOWN_WITH_NO_FRACTION = new Set(['VND']);
+
+/**
+ * Says if "Hide decimal places" is the usual setting for a budget in
+ * this currency.
+ */
+export function hidesFractionByDefault(currencyCode: string): boolean {
+  return (
+    getDecimalPlaces(currencyCode) === 0 ||
+    CURRENCIES_SHOWN_WITH_NO_FRACTION.has(currencyCode)
+  );
+}

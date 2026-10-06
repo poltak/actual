@@ -1,4 +1,9 @@
-import { currencies, getDecimalPlaces } from './currencies';
+import {
+  currencies,
+  getDecimalPlaces,
+  hidesFractionByDefault,
+  isForeignCurrency,
+} from './currencies';
 
 describe('getDecimalPlaces', () => {
   it('returns 2 for empty string (None)', () => {
@@ -46,5 +51,43 @@ describe('currency metadata', () => {
   it('first entry is None with code empty string and decimalPlaces 2', () => {
     expect(currencies[0].code).toBe('');
     expect(currencies[0].decimalPlaces).toBe(2);
+  });
+});
+
+describe('isForeignCurrency', () => {
+  it('is true only for a currency that is not the currency of the budget', () => {
+    expect(isForeignCurrency({ currency: 'USD', baseCurrency: 'VND' })).toBe(
+      true,
+    );
+    expect(isForeignCurrency({ currency: 'VND', baseCurrency: 'VND' })).toBe(
+      false,
+    );
+  });
+
+  it('reads an account with no currency as in the currency of the budget', () => {
+    expect(isForeignCurrency({ currency: null, baseCurrency: 'VND' })).toBe(
+      false,
+    );
+    expect(isForeignCurrency({ currency: '', baseCurrency: 'VND' })).toBe(
+      false,
+    );
+    expect(
+      isForeignCurrency({ currency: undefined, baseCurrency: 'VND' }),
+    ).toBe(false);
+  });
+});
+
+describe('hidesFractionByDefault', () => {
+  it('is true for a currency with no decimal places', () => {
+    expect(hidesFractionByDefault('JPY')).toBe(true);
+  });
+
+  it('is true for VND, which is stored with 2 decimal places', () => {
+    expect(hidesFractionByDefault('VND')).toBe(true);
+  });
+
+  it('is false for a currency with decimals in daily use', () => {
+    expect(hidesFractionByDefault('USD')).toBe(false);
+    expect(hidesFractionByDefault('')).toBe(false);
   });
 });

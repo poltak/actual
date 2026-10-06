@@ -1,4 +1,7 @@
 import * as db from '#server/db';
+import { isForeignCurrency } from '#shared/currencies';
+
+export { isForeignCurrency };
 
 /**
  * The currency of the budget. `transactions.amount` is always in this
@@ -35,18 +38,4 @@ export async function getForeignCurrencies(): Promise<{
     }
   }
   return { baseCurrency, foreignCurrencies };
-}
-
-/**
- * True when an account holds a currency that is not the currency of the
- * budget. An account with no currency is in the base currency.
- */
-export function isForeignCurrency({
-  currency,
-  baseCurrency,
-}: {
-  currency: string | null | undefined;
-  baseCurrency: string | null;
-}): boolean {
-  return currency != null && currency !== '' && currency !== baseCurrency;
 }

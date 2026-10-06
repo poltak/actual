@@ -5,10 +5,15 @@ import { Select } from '@actual-app/components/select';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
-import { currencies, getCurrency } from '@actual-app/core/shared/currencies';
+import {
+  currencies,
+  getCurrency,
+  hidesFractionByDefault,
+} from '@actual-app/core/shared/currencies';
 import { css } from '@emotion/css';
 
 import { Checkbox } from '#components/forms';
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 
 import { Column, Setting } from './UI';
@@ -79,6 +84,9 @@ export function CurrencySettings() {
     'defaultCurrencyCode',
   );
   const selectedCurrencyCode = defaultCurrencyCode || '';
+  // Each amount of a foreign currency account has a stored value in the
+  // currency of the budget, so that currency cannot change then
+  const { hasForeignAccount } = useAccountCurrencies();
 
   const [symbolPosition, setSymbolPositionPref] = useSyncedPref(
     'currencySymbolPosition',
@@ -112,7 +120,7 @@ export function CurrencySettings() {
     if (code !== '') {
       const cur = getCurrency(code);
       setNumberFormatPref(cur.numberFormat);
-      setHideFractionPref(cur.decimalPlaces === 0 ? 'true' : 'false');
+      setHideFractionPref(hidesFractionByDefault(cur.code) ? 'true' : 'false');
       setSpaceEnabledPref(cur.symbolFirst ? 'false' : 'true');
       setSymbolPositionPref(cur.symbolFirst ? 'before' : 'after');
     }
@@ -154,7 +162,16 @@ export function CurrencySettings() {
                 options={currencyOptions}
                 className={selectButtonClassName}
                 style={{ width: '100%' }}
+                disabled={hasForeignAccount}
               />
+              {hasForeignAccount && (
+                <Text style={{ color: theme.pageTextSubdued }}>
+                  <Trans>
+                    The currency of the budget cannot change while an account
+                    has a different currency.
+                  </Trans>
+                </Text>
+              )}
             </Column>
 
             <Column

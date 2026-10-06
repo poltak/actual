@@ -12,6 +12,7 @@ import { Permissions } from '#auth/types';
 import { Link } from '#components/common/Link';
 import { Checkbox } from '#components/forms';
 import { useLoginMethod, useMultiuserEnabled } from '#components/ServerContext';
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useServerPref } from '#hooks/useServerPref';
 import { useSyncedPref } from '#hooks/useSyncedPref';
@@ -157,6 +158,19 @@ export function ExperimentalFeatures() {
   const goalTemplatesUIEnabled = useFeatureFlag('goalTemplatesUIEnabled');
   const showGoalTemplatesUI = goalTemplatesEnabled || goalTemplatesUIEnabled;
 
+  const currencyEnabled = useFeatureFlag('currency');
+  const multiCurrencyEnabled = useFeatureFlag('multiCurrency');
+  const showMultiCurrency = currencyEnabled || multiCurrencyEnabled;
+  // An account with its own currency needs the two features, so they
+  // stay on while such an account exists
+  const { hasForeignAccount } = useAccountCurrencies();
+  const foreignAccountError = (
+    <Trans>
+      An account has a currency that is different from the currency of the
+      budget.
+    </Trans>
+  );
+
   const showServerPrefs =
     localStorage.getItem('devEnableServerPrefs') === 'true';
 
@@ -199,9 +213,23 @@ export function ExperimentalFeatures() {
             <FeatureToggle
               flag="currency"
               feedbackLink="https://github.com/actualbudget/actual/issues/5191"
+              disableToggle={hasForeignAccount && currencyEnabled}
+              error={foreignAccountError}
             >
               <Trans>Currency support</Trans>
             </FeatureToggle>
+            {showMultiCurrency && (
+              <View style={{ paddingLeft: 22 }}>
+                <FeatureToggle
+                  flag="multiCurrency"
+                  feedbackLink="https://github.com/actualbudget/actual/issues/1132"
+                  disableToggle={hasForeignAccount && multiCurrencyEnabled}
+                  error={foreignAccountError}
+                >
+                  <Trans>Subfeature: A currency for each account</Trans>
+                </FeatureToggle>
+              </View>
+            )}
             <FeatureToggle
               flag="mobileCalculator"
               feedbackLink="https://github.com/actualbudget/actual/issues/8255"

@@ -143,13 +143,18 @@ export async function addTransfer(
     schedule: transaction.schedule,
     cleared: false,
   };
-  const { notes, cleared, schedule } = await runRules(transferTransaction);
-  const matchedSchedule = schedule ?? transaction.schedule;
   const nativeAmount = await getOtherSideNativeAmount({
     transaction,
     targetAccount: transferredAccount,
     given: otherSideNativeAmount,
   });
+  // With the native amount on the row, the rules see the amount in the
+  // currency of the account that gets the transfer
+  const { notes, cleared, schedule } = await runRules({
+    ...transferTransaction,
+    ...(nativeAmount != null && { native_amount: nativeAmount }),
+  });
+  const matchedSchedule = schedule ?? transaction.schedule;
 
   const id = await db.insertTransaction({
     ...transferTransaction,

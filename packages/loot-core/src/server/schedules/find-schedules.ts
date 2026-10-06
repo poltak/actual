@@ -51,6 +51,13 @@ function getRank(day1, day2) {
   return 1 / (dayDiff + 1);
 }
 
+// A schedule holds the amount in the currency of its account. The
+// stored `amount` of a row in a foreign currency account changes with
+// the exchange rate, so the same bill would look different each month.
+function amountInAccount(trans) {
+  return trans.native_amount ?? trans.amount;
+}
+
 function matchSchedules(allOccurs, config) {
   allOccurs = [...allOccurs].reverse();
   const baseOccur = allOccurs[0];
@@ -58,14 +65,15 @@ function matchSchedules(allOccurs, config) {
   const schedules = [];
 
   for (const trans of baseOccur.transactions) {
-    const threshold = getApproxNumberThreshold(trans.amount);
+    const amount = amountInAccount(trans);
+    const threshold = getApproxNumberThreshold(amount);
     const payee = trans.payee;
 
     const found = occurs.map(occur => {
       let matched = occur.transactions.find(
         t =>
-          t.amount >= trans.amount - threshold &&
-          t.amount <= trans.amount + threshold,
+          amountInAccount(t) >= amount - threshold &&
+          amountInAccount(t) <= amount + threshold,
       );
       matched = matched && matched.payee === payee ? matched : null;
 
@@ -85,13 +93,13 @@ function matchSchedules(allOccurs, config) {
     );
 
     const exactAmount = found.reduce(
-      (exact, match) => exact && match.trans.amount === trans.amount,
+      (exact, match) => exact && amountInAccount(match.trans) === amount,
       true,
     );
 
     schedules.push({
       rank,
-      amount: trans.amount,
+      amount,
       account: trans.account,
       payee: trans.payee,
       date: config,
@@ -285,6 +293,7 @@ async function findStartDate(schedule) {
 
     const { filters, errors } = conditionsToAQL(newConditions, {
       recurDateBounds: 1,
+      amountField: 'native_amount',
     });
     if (errors.length > 0) {
       // Somehow we generated an invalid config. Abort the whole

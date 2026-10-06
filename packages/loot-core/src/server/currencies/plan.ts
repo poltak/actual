@@ -477,8 +477,13 @@ export async function planCurrencyWrites({
 
   function applyToUpdated(work: Work): TransactionWrite {
     if (!work.raw) {
-      // The row is not in the database. Leave the write as the caller sent it.
-      return withoutCurrencyFields(work.row);
+      // The row is not in the database. A caller can send a new row as
+      // an update, as the rules do for the children of a new split. Such
+      // a row in a foreign currency account gets its amounts as a new
+      // row. All other rows stay as the caller sent them.
+      return work.currency
+        ? applyToAdded(work)
+        : withoutCurrencyFields(work.row);
     }
 
     const { _transfer_native_amount: _unused, ...row } = work.row;

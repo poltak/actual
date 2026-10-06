@@ -7,6 +7,7 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import {
   currencies,
+  FRANKFURTER_PROVIDER,
   getCurrency,
   hidesFractionByDefault,
 } from '@actual-app/core/shared/currencies';
@@ -14,11 +15,13 @@ import { css } from '@emotion/css';
 
 import { Checkbox } from '#components/forms';
 import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
+import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 
 import { Column, Setting } from './UI';
 
-export function CurrencySettings() {
+// The names of the currencies in the language of the user
+function useCurrencyTranslations() {
   const { t } = useTranslation();
 
   const currencyTranslations = useMemo(
@@ -80,6 +83,31 @@ export function CurrencySettings() {
     [t],
   );
 
+  return currencyTranslations;
+}
+
+/** The currencies as options for a select, with the code as the value */
+export function useCurrencyOptions(): [string, string][] {
+  const currencyTranslations = useCurrencyTranslations();
+
+  return currencies.map(currency => {
+    const translatedName =
+      currencyTranslations.get(currency.code) ?? currency.name;
+    if (currency.code === '') {
+      return [currency.code, translatedName];
+    }
+    return [
+      currency.code,
+      `${currency.code} - ${translatedName} (${currency.symbol})`,
+    ];
+  });
+}
+
+export function CurrencySettings() {
+  const { t } = useTranslation();
+  const currencyOptions = useCurrencyOptions();
+  const isMultiCurrencyEnabled = useFeatureFlag('multiCurrency');
+
   const [defaultCurrencyCode, setDefaultCurrencyCodePref] = useSyncedPref(
     'defaultCurrencyCode',
   );
@@ -96,23 +124,14 @@ export function CurrencySettings() {
   );
   const [, setNumberFormatPref] = useSyncedPref('numberFormat');
   const [, setHideFractionPref] = useSyncedPref('hideFraction');
+  const [exchangeRateProvider, setExchangeRateProviderPref] = useSyncedPref(
+    'exchangeRateProvider',
+  );
 
   const selectButtonClassName = css({
     '&[data-hovered]': {
       backgroundColor: theme.buttonNormalBackgroundHover,
     },
-  });
-
-  const currencyOptions: [string, string][] = currencies.map(currency => {
-    const translatedName =
-      currencyTranslations.get(currency.code) ?? currency.name;
-    if (currency.code === '') {
-      return [currency.code, translatedName];
-    }
-    return [
-      currency.code,
-      `${currency.code} - ${translatedName} (${currency.symbol})`,
-    ];
   });
 
   const handleCurrencyChange = (code: string) => {
@@ -213,6 +232,44 @@ export function CurrencySettings() {
               >
                 <Trans>Add space between amount and symbol</Trans>
               </label>
+            </View>
+          )}
+
+          {selectedCurrencyCode !== '' && isMultiCurrencyEnabled && (
+            <View style={{ gap: '0.3em' }}>
+              <View
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                }}
+              >
+                <Checkbox
+                  id="settings-exchangeRateDownload"
+                  checked={exchangeRateProvider === FRANKFURTER_PROVIDER}
+                  onChange={e =>
+                    setExchangeRateProviderPref(
+                      e.target.checked ? FRANKFURTER_PROVIDER : '',
+                    )
+                  }
+                />
+                <label
+                  htmlFor="settings-exchangeRateDownload"
+                  style={{ marginLeft: '0.5em' }}
+                >
+                  <Trans>Download exchange rates</Trans>
+                </label>
+              </View>
+              <Text style={{ color: theme.pageTextSubdued }}>
+                <Trans>
+                  An account in a different currency needs the exchange rate of
+                  each transaction date. With this setting, Actual gets the
+                  rates from api.frankfurter.dev, a free service with the rates
+                  of central banks. The request has only the currency codes and
+                  the dates.
+                </Trans>
+              </Text>
             </View>
           )}
         </View>

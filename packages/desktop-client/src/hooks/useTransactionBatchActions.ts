@@ -28,6 +28,8 @@ import type {
 import { aqlQuery } from '#queries/aqlQuery';
 import { useDispatch } from '#redux';
 
+import { useAccountCurrencies } from './useAccountCurrencies';
+
 type BatchReconciledReason = Extract<
   ConfirmTransactionEditReason,
   `batch${string}Reconciled`
@@ -78,6 +80,7 @@ type BatchUnlinkScheduleProps = {
 export function useTransactionBatchActions() {
   const dispatch = useDispatch();
   const { t } = useTranslation();
+  const { foreignCurrencyOf } = useAccountCurrencies();
 
   const onBatchEdit = async ({ name, ids, onSuccess }: BatchEditProps) => {
     const { data } = await aqlQuery(
@@ -298,11 +301,19 @@ export function useTransactionBatchActions() {
         added: transactions.reduce(
           (newTransactions: TransactionEntity[], trans: TransactionEntity) => {
             return newTransactions.concat(
-              realizeTempTransactions(ungroupTransaction(trans)).map(t => ({
-                ...t,
-                cleared: false,
-                reconciled: false,
-              })),
+              realizeTempTransactions(ungroupTransaction(trans)).map(t => {
+                const copy = { ...t, cleared: false, reconciled: false };
+                // A copy in a foreign currency account brings only its
+                // native amount, and the server gives it a value in the
+                // currency of the budget. A copy with the two amounts
+                // would get a lock on that value. Only a value that a
+                // person set is copied, with its lock.
+                if (foreignCurrencyOf(t.account) && !t.amount_locked) {
+                  const { amount: _baseValue, ...withNativeAmount } = copy;
+                  return withNativeAmount as TransactionEntity;
+                }
+                return copy;
+              }),
             );
           },
           [],
@@ -530,7 +541,13 @@ export function useTransactionBatchActions() {
       );
       const [fromTrans, toTrans] = transactions;
 
-      if (transactions.length === 2 && validForTransfer(fromTrans, toTrans)) {
+      if (
+        transactions.length === 2 &&
+        validForTransfer(fromTrans, toTrans, {
+          fromCurrency: foreignCurrencyOf(fromTrans.account),
+          toCurrency: foreignCurrencyOf(toTrans.account),
+        })
+      ) {
         const fromPayee = payees.find(
           p => p.transfer_acct === fromTrans.account,
         );

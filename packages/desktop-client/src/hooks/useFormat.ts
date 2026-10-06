@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo } from 'react';
 
 import { evalArithmetic } from '@actual-app/core/shared/arithmetic';
-import { getCurrency } from '@actual-app/core/shared/currencies';
+import {
+  getCurrency,
+  isForeignCurrency,
+} from '@actual-app/core/shared/currencies';
 import type { Currency } from '@actual-app/core/shared/currencies';
 import {
   amountToInteger,
@@ -102,7 +105,16 @@ function format(
   }
 }
 
-export function useFormat(): UseFormatResult {
+/**
+ * Formats and parses amounts in the currency of the budget.
+ *
+ * With a `currencyCode`, the amounts are in that currency. This is for
+ * an account with its own currency. The thousands and decimal marks
+ * stay as the user set them, but "Hide decimal places" and the symbol
+ * settings do not apply: they are choices for the currency of the
+ * budget.
+ */
+export function useFormat(currencyCode?: string | null): UseFormatResult {
   const [numberFormatPref] = useSyncedPref('numberFormat');
   const [hideFractionPref] = useSyncedPref('hideFraction');
   const [defaultCurrencyCodePref] = useSyncedPref('defaultCurrencyCode');
@@ -111,9 +123,25 @@ export function useFormat(): UseFormatResult {
     'currencySpaceBetweenAmountAndSymbol',
   );
 
+  const baseCurrencyCode = defaultCurrencyCodePref || '';
+  const isOtherCurrency = isForeignCurrency({
+    currency: currencyCode,
+    baseCurrency: baseCurrencyCode,
+  });
+
   const activeCurrency = useMemo(() => {
-    return getCurrency(defaultCurrencyCodePref || '');
-  }, [defaultCurrencyCodePref]);
+    return getCurrency((isOtherCurrency && currencyCode) || baseCurrencyCode);
+  }, [isOtherCurrency, currencyCode, baseCurrencyCode]);
+
+  const hideFraction = !isOtherCurrency && hideFractionPref === 'true';
+  const symbolPosition = isOtherCurrency
+    ? activeCurrency.symbolFirst
+      ? 'before'
+      : 'after'
+    : symbolPositionPref || 'before';
+  const isSpaceEnabled = isOtherCurrency
+    ? !activeCurrency.symbolFirst
+    : spaceEnabledPref === 'true';
 
   const numberFormatConfig = useMemo(
     () =>
@@ -145,17 +173,16 @@ export function useFormat(): UseFormatResult {
         valueWithoutSign = formattedNumericValue.slice(1);
       }
 
-      const space = spaceEnabledPref === 'true' ? '\u202F' : '';
-      const position = symbolPositionPref || 'before';
+      const space = isSpaceEnabled ? '\u202F' : '';
 
       const styledAmount =
-        position === 'after'
+        symbolPosition === 'after'
           ? `${valueWithoutSign}${space}${currencySymbol}`
           : `\u202A${currencySymbol}\u202C${space}${valueWithoutSign}`;
 
       return sign + styledAmount;
     },
-    [symbolPositionPref, spaceEnabledPref],
+    [symbolPosition, isSpaceEnabled],
   );
 
   const formatDisplay = useCallback(
@@ -168,7 +195,7 @@ export function useFormat(): UseFormatResult {
       let displayDecimalPlaces: number | undefined;
 
       if (isFinancialType) {
-        if (type === 'financial-no-decimals' || hideFractionPref === 'true') {
+        if (type === 'financial-no-decimals' || hideFraction) {
           displayDecimalPlaces = 0;
         } else {
           displayDecimalPlaces = activeCurrency.decimalPlaces;
@@ -203,12 +230,7 @@ export function useFormat(): UseFormatResult {
       }
       return styledValue;
     },
-    [
-      activeCurrency,
-      numberFormatConfig,
-      applyCurrencyStyling,
-      hideFractionPref,
-    ],
+    [activeCurrency, numberFormatConfig, applyCurrencyStyling, hideFraction],
   );
 
   const forEdit = useCallback(
@@ -217,7 +239,7 @@ export function useFormat(): UseFormatResult {
       // Show a stored fraction (¥1,500.50) so saving the text unedited
       // doesn't round it away, unless fractions are hidden
       const decimalPlaces =
-        hideFractionPref === 'true'
+        hideFraction
           ? 0
           : value % 100 !== 0
             ? 2
@@ -228,7 +250,7 @@ export function useFormat(): UseFormatResult {
       }).formatter;
       return editFormatter.format(amount);
     },
-    [hideFractionPref, activeCurrency.decimalPlaces, numberFormatConfig.format],
+    [hideFraction, activeCurrency.decimalPlaces, numberFormatConfig.format],
   );
 
   const fromEdit = useCallback(

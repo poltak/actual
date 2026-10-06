@@ -39,7 +39,7 @@ async function accountCount() {
   return rows.length;
 }
 
-async function useVndBudget() {
+async function prepareVndBudget() {
   await db.update('preferences', { id: 'defaultCurrencyCode', value: 'VND' });
   await saveRates({
     rates: [{ from: 'USD', to: 'VND', date: TODAY, rate: 25000 }],
@@ -51,7 +51,7 @@ beforeEach(global.emptyDatabase());
 
 describe('account-create with a currency', () => {
   it('stores the currency and converts the starting balance', async () => {
-    await useVndBudget();
+    await prepareVndBudget();
 
     const id = await createAccount({
       name: 'Wise USD',
@@ -73,7 +73,7 @@ describe('account-create with a currency', () => {
   });
 
   it('stores no currency for an account in the currency of the budget', async () => {
-    await useVndBudget();
+    await prepareVndBudget();
 
     const explicit = await createAccount({
       name: 'Bank',
@@ -100,7 +100,7 @@ describe('account-create with a currency', () => {
   });
 
   it('refuses a currency that is not in the list', async () => {
-    await useVndBudget();
+    await prepareVndBudget();
 
     await expect(
       createAccount({ name: 'Mystery', currency: 'XYZ' }),
@@ -124,7 +124,7 @@ describe('account-create with a currency', () => {
 
 describe('the balance of a foreign currency account', () => {
   it('is in the currency of the account, with its stored value next to it', async () => {
-    await useVndBudget();
+    await prepareVndBudget();
     const usd = await createAccount({
       name: 'Wise USD',
       balance: 100,
@@ -150,7 +150,7 @@ describe('the balance of a foreign currency account', () => {
 
 describe('account-close for a foreign currency account', () => {
   it('moves the balance and its stored value to the other account', async () => {
-    await useVndBudget();
+    await prepareVndBudget();
     const usd = await createAccount({
       name: 'Wise USD',
       balance: 100,
@@ -185,7 +185,7 @@ describe('account-close for a foreign currency account', () => {
 
 describe('the currency of the budget', () => {
   it('cannot change while an account has a different currency', async () => {
-    await useVndBudget();
+    await prepareVndBudget();
     await createAccount({ name: 'Wise USD', currency: 'USD' });
 
     await expect(
@@ -202,7 +202,7 @@ describe('the currency of the budget', () => {
   });
 
   it('can change while all accounts are in the currency of the budget', async () => {
-    await useVndBudget();
+    await prepareVndBudget();
     await createAccount({ name: 'Cash' });
 
     await savePref({ id: 'defaultCurrencyCode', value: 'EUR' });
@@ -220,7 +220,7 @@ describe('the API for accounts', () => {
   });
 
   it('takes a currency at creation, returns it, and does not let it change', async () => {
-    await useVndBudget();
+    await prepareVndBudget();
 
     const id = await handlers['api/account-create']({
       account: { name: 'Wise USD', currency: 'USD' },
@@ -237,5 +237,52 @@ describe('the API for accounts', () => {
     await expect(
       handlers['api/account-update']({ id, fields: { currency: 'EUR' } }),
     ).rejects.toThrow('The currency of an account cannot change');
+  });
+});
+
+describe('transactions-batch-update for a foreign currency account', () => {
+  const batchUpdate = handlers['transactions-batch-update'];
+
+  async function addCoffee() {
+    await prepareVndBudget();
+    const usd = await createAccount({ name: 'Wise USD', currency: 'USD' });
+    await batchUpdate({
+      added: [{ id: 'coffee', account: usd, date: TODAY, amount: -1000 }],
+    });
+    return usd;
+  }
+
+  it('reads a lone amount in the currency of the account by default', async () => {
+    const usd = await addCoffee();
+
+    await batchUpdate({ updated: [{ id: 'coffee', amount: -2000 }] });
+
+    expect(await transactionsOf(usd)).toEqual([
+      expect.objectContaining({ amount: -50000000, native_amount: -2000 }),
+    ]);
+  });
+
+  it('takes a value in the currency of the budget from a screen that says so', async () => {
+    const usd = await addCoffee();
+
+    await batchUpdate({
+      updated: [{ id: 'coffee', amount: -25505300 }],
+      amountSemantics: 'explicit',
+    });
+
+    expect(await transactionsOf(usd)).toEqual([
+      expect.objectContaining({ amount: -25505300, native_amount: -1000 }),
+    ]);
+    const locked = await db.first<{ amount_locked: number }>(
+      "SELECT amount_locked FROM transactions WHERE id = 'coffee'",
+    );
+    expect(locked?.amount_locked).toBe(1);
+
+    // Without the lock, the value follows the exchange rate again
+    await batchUpdate({ updated: [{ id: 'coffee', amount_locked: false }] });
+
+    expect(await transactionsOf(usd)).toEqual([
+      expect.objectContaining({ amount: -25000000, native_amount: -1000 }),
+    ]);
   });
 });

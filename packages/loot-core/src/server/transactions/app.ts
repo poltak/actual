@@ -39,6 +39,11 @@ async function handleBatchUpdateTransactions({
   updated,
   learnCategories,
   runTransfers = true,
+  // How to read an `amount` with no `native_amount` for a row in a
+  // foreign currency account. The default reads it in the currency of
+  // the account. A screen that sets the value in the currency of the
+  // budget passes `explicit`.
+  amountSemantics,
 }: Parameters<typeof batchUpdateTransactions>[0]) {
   const result = await batchUpdateTransactions({
     added,
@@ -46,6 +51,7 @@ async function handleBatchUpdateTransactions({
     deleted,
     learnCategories,
     runTransfers,
+    amountSemantics,
   });
 
   return result;

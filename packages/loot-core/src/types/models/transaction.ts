@@ -34,6 +34,9 @@ export type TransactionEntity = {
   schedule?: ScheduleEntity['id'];
   subtransactions?: TransactionEntity[];
   _unmatched?: boolean;
+  // Only for a write: the amount in the other account of a new transfer,
+  // in the currency of that account. It is never stored on this row.
+  _transfer_native_amount?: IntegerAmount | null;
   _deleted?: boolean;
   error?: {
     type: 'SplitTransactionError';

@@ -1,5 +1,9 @@
 // @ts-strict-ignore
+import { getForeignCurrencies } from '#server/currencies/base-currency';
+import { MissingRateError } from '#server/currencies/plan';
+import { getStoredRate } from '#server/currencies/rates';
 import * as db from '#server/db';
+import { convertAmount } from '#shared/currency-conversion';
 
 import { runRules } from './transaction-rules';
 
@@ -44,7 +48,78 @@ async function clearCategory(transaction, transferAcct) {
   return false;
 }
 
-export async function addTransfer(transaction, transferredAccount) {
+// The native amount for the side of a transfer in `targetAccount`.
+// `amount` is the base value and the two sides mirror it, but each side
+// has its own amount in the currency of its account.
+//
+// Returns undefined when nothing has to be written.
+async function getOtherSideNativeAmount({
+  transaction,
+  targetAccount,
+  given,
+  stored,
+}: {
+  // The side that the caller wrote
+  transaction;
+  targetAccount: string;
+  // The amount in the other account, when the caller knows it
+  given?: number | null;
+  // The other side as it is in the database, for an update
+  stored?: Pick<db.DbTransaction, 'acct' | 'native_amount'> | null;
+}): Promise<number | null | undefined> {
+  const { baseCurrency, foreignCurrencies } = await getForeignCurrencies();
+  const targetCurrency = foreignCurrencies.get(targetAccount) ?? null;
+
+  if (!targetCurrency) {
+    // An account in the base currency stores no native amount
+    return stored && stored.native_amount != null ? null : undefined;
+  }
+  if (given != null) {
+    return given;
+  }
+
+  const sourceCurrency = foreignCurrencies.get(transaction.account) ?? null;
+  if (sourceCurrency === targetCurrency) {
+    return -(transaction.native_amount ?? transaction.amount) || 0;
+  }
+
+  // The amount in a different currency is real money that only the user
+  // knows. Keep it while that side stays in the same currency.
+  const storedCurrency = stored
+    ? (foreignCurrencies.get(stored.acct) ?? null)
+    : null;
+  if (stored?.native_amount != null && storedCurrency === targetCurrency) {
+    return undefined;
+  }
+
+  if (transaction.amount === 0) {
+    return 0;
+  }
+  const rate = await getStoredRate({
+    from: targetCurrency,
+    to: baseCurrency,
+    date: transaction.date,
+  });
+  if (!rate) {
+    throw new MissingRateError({
+      from: targetCurrency,
+      to: baseCurrency,
+      date: transaction.date,
+    });
+  }
+  return convertAmount({
+    amount: -transaction.amount,
+    rate: 1 / rate.rate,
+    fromCurrency: baseCurrency,
+    toCurrency: targetCurrency,
+  });
+}
+
+export async function addTransfer(
+  transaction,
+  transferredAccount,
+  { otherSideNativeAmount }: { otherSideNativeAmount?: number | null } = {},
+) {
   if (transaction.is_parent) {
     // For split transactions, we should create transfers using child transactions.
     // This is to ensure that the amounts received by the transferred account
@@ -70,9 +145,15 @@ export async function addTransfer(transaction, transferredAccount) {
   };
   const { notes, cleared, schedule } = await runRules(transferTransaction);
   const matchedSchedule = schedule ?? transaction.schedule;
+  const nativeAmount = await getOtherSideNativeAmount({
+    transaction,
+    targetAccount: transferredAccount,
+    given: otherSideNativeAmount,
+  });
 
   const id = await db.insertTransaction({
     ...transferTransaction,
+    ...(nativeAmount != null && { native_amount: nativeAmount }),
     notes,
     cleared,
     schedule: matchedSchedule,
@@ -119,6 +200,16 @@ export async function removeTransfer(transaction) {
 
 export async function updateTransfer(transaction, transferredAccount) {
   const payee = await getPayee(transaction.account);
+  const stored = await db.first<
+    Pick<db.DbTransaction, 'acct' | 'native_amount'>
+  >('SELECT acct, native_amount FROM transactions WHERE id = ?', [
+    transaction.transfer_id,
+  ]);
+  const nativeAmount = await getOtherSideNativeAmount({
+    transaction,
+    targetAccount: transferredAccount,
+    stored,
+  });
 
   await db.updateTransaction({
     id: transaction.transfer_id,
@@ -128,6 +219,7 @@ export async function updateTransfer(transaction, transferredAccount) {
     payee: payee.id,
     notes: transaction.notes,
     amount: -transaction.amount,
+    ...(nativeAmount !== undefined && { native_amount: nativeAmount }),
     schedule: transaction.schedule,
   });
 
@@ -137,11 +229,14 @@ export async function updateTransfer(transaction, transferredAccount) {
   }
 }
 
-export async function onInsert(transaction) {
+export async function onInsert(
+  transaction,
+  options: { otherSideNativeAmount?: number | null } = {},
+) {
   const transferredAccount = await getTransferredAccount(transaction);
 
   if (transferredAccount) {
-    return addTransfer(transaction, transferredAccount);
+    return addTransfer(transaction, transferredAccount, options);
   }
 }
 
@@ -151,7 +246,10 @@ export async function onDelete(transaction) {
   }
 }
 
-export async function onUpdate(transaction) {
+export async function onUpdate(
+  transaction,
+  options: { otherSideNativeAmount?: number | null } = {},
+) {
   const transferredAccount = await getTransferredAccount(transaction);
 
   if (transaction.is_parent) {
@@ -159,7 +257,7 @@ export async function onUpdate(transaction) {
   }
 
   if (transferredAccount && !transaction.transfer_id) {
-    return addTransfer(transaction, transferredAccount);
+    return addTransfer(transaction, transferredAccount, options);
   }
 
   if (!transferredAccount && transaction.transfer_id) {

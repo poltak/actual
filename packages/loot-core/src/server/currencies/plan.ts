@@ -190,9 +190,15 @@ export async function planCurrencyWrites({
     }
   }
 
-  const partnerIds = [...rawRows.values()].flatMap(raw =>
-    raw.transferred_id ? [raw.transferred_id] : [],
-  );
+  const partnerIds = [
+    ...[...rawRows.values()].flatMap(raw =>
+      raw.transferred_id ? [raw.transferred_id] : [],
+    ),
+    // A write can link two rows that exist as a new transfer
+    ...[...addedWithIds, ...updated].flatMap(row =>
+      row.transfer_id ? [row.transfer_id] : [],
+    ),
+  ];
   const extraRows = await loadRawRows(
     [...partnerIds, ...parentIds].filter(id => !rawRows.has(id)),
   );
@@ -270,18 +276,23 @@ export async function planCurrencyWrites({
 
   // The side of a transfer whose base value comes from the other side
   function partnerOf(work: Work): RawRow | null {
-    if (!work.raw?.transferred_id || work.isParent) {
+    const partnerId =
+      work.row.transfer_id !== undefined
+        ? work.row.transfer_id
+        : work.raw?.transferred_id;
+    if (!partnerId || work.isParent) {
       return null;
     }
-    const partner = storedRow(work.raw.transferred_id);
+    const partner = storedRow(partnerId);
     if (!partner || partner.tombstone === 1) {
       return null;
     }
+    const isNewLink = partnerId !== work.raw?.transferred_id;
 
     // A new payee moves the other side to the account of that payee. A
     // payee that is not an account ends the transfer.
-    let partnerAccount = partner.acct;
-    if (work.row.payee !== undefined) {
+    let partnerAccount = workById.get(partnerId)?.account ?? partner.acct;
+    if (work.row.payee !== undefined && !isNewLink) {
       const movedTo = work.row.payee
         ? transferAccountOf.get(work.row.payee)
         : null;
@@ -297,12 +308,19 @@ export async function planCurrencyWrites({
       work.existing?.native_amount ??
       work.existing?.amount ??
       0;
-    const ownsAmount = ownsTransferAmount({
+    let ownsAmount = ownsTransferAmount({
       baseCurrency,
       currency: work.currency,
       partnerCurrency,
       nativeAmount,
     });
+    // The transfer code mirrors a change from one side to the other, but
+    // it does not run for a new link between two rows. So one side takes
+    // the value of the other here, also when the two accounts have the
+    // same currency.
+    if (isNewLink && work.currency && work.currency === partnerCurrency) {
+      ownsAmount = nativeAmount < 0;
+    }
     return ownsAmount ? null : partner;
   }
 

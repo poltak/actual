@@ -633,6 +633,7 @@ handlers['api/account-create'] = withMutation(async function ({
     name: account.name,
     offBudget: account.offbudget,
     closed: account.closed,
+    currency: account.currency,
     // Current the API expects an amount but it really should expect
     // an integer
     balance: initialBalance != null ? integerToAmount(initialBalance) : null,
@@ -641,6 +642,9 @@ handlers['api/account-create'] = withMutation(async function ({
 
 handlers['api/account-update'] = withMutation(async function ({ id, fields }) {
   checkFileOpen();
+  if ('currency' in fields) {
+    throw APIError('The currency of an account cannot change');
+  }
   // @ts-expect-error - fix me
   return db.updateAccount({ id, ...accountModel.fromExternal(fields) });
 });

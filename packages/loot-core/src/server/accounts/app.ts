@@ -5,6 +5,12 @@ import * as asyncStorage from '#platform/server/asyncStorage';
 import * as connection from '#platform/server/connection';
 import { logger } from '#platform/server/log';
 import { createApp } from '#server/app';
+import {
+  getBaseCurrency,
+  getForeignCurrencies,
+} from '#server/currencies/base-currency';
+import { MissingRateError } from '#server/currencies/plan';
+import { getStoredRate } from '#server/currencies/rates';
 import * as db from '#server/db';
 import {
   APIError,
@@ -18,7 +24,9 @@ import { del, get, post } from '#server/post';
 import { getPrefs } from '#server/prefs';
 import { getServer } from '#server/server-config';
 import { batchMessages } from '#server/sync';
+import { batchUpdateTransactions } from '#server/transactions';
 import { undoable, withUndo } from '#server/undo';
+import { getCurrency, getDecimalPlaces } from '#shared/currencies';
 import { isNonProductionEnvironment } from '#shared/environment';
 import { dayFromDate } from '#shared/months';
 import * as monthUtils from '#shared/months';
@@ -140,6 +148,11 @@ async function getAccounts(): Promise<AccountEntity[]> {
   );
 }
 
+// The balance of an account is in the currency of the account. A row in
+// a base currency account stores no native amount, and `amount` is that
+// amount then.
+const NATIVE_SUM = 'sum(IFNULL(native_amount, amount))';
+
 async function getAccountBalance({
   id,
   cutoff,
@@ -148,15 +161,18 @@ async function getAccountBalance({
   cutoff: string | Date;
 }) {
   const result = await db.first<{ balance: number }>(
-    'SELECT sum(amount) as balance FROM transactions WHERE acct = ? AND isParent = 0 AND tombstone = 0 AND date <= ?',
+    `SELECT ${NATIVE_SUM} as balance FROM transactions WHERE acct = ? AND isParent = 0 AND tombstone = 0 AND date <= ?`,
     [id, db.toDateRepr(dayFromDate(cutoff))],
   );
   return result?.balance ? result.balance : 0;
 }
 
 async function getAccountProperties({ id }: { id: AccountEntity['id'] }) {
-  const balanceResult = await db.first<{ balance: number }>(
-    'SELECT sum(amount) as balance FROM transactions WHERE acct = ? AND isParent = 0 AND tombstone = 0',
+  const balanceResult = await db.first<{
+    balance: number;
+    baseBalance: number;
+  }>(
+    `SELECT ${NATIVE_SUM} as balance, sum(amount) as baseBalance FROM transactions WHERE acct = ? AND isParent = 0 AND tombstone = 0`,
     [id],
   );
   const countResult = await db.first<{ count: number }>(
@@ -166,6 +182,9 @@ async function getAccountProperties({ id }: { id: AccountEntity['id'] }) {
 
   return {
     balance: balanceResult?.balance || 0,
+    // The stored value of the balance in the base currency. It is equal
+    // to `balance` for an account in the base currency.
+    baseBalance: balanceResult?.baseBalance || 0,
     numTransactions: countResult?.count || 0,
   };
 }
@@ -559,16 +578,55 @@ async function createAccount({
   balance = 0,
   offBudget = false,
   closed = false,
+  currency = null,
 }: {
   name: string;
+  // In the currency of the account
   balance?: number | undefined;
   offBudget?: boolean | undefined;
   closed?: boolean | undefined;
+  // ISO code. An account keeps its currency for its full life. With no
+  // currency, the account is in the base currency of the budget.
+  currency?: string | null | undefined;
 }) {
+  const baseCurrency = await getBaseCurrency();
+  const foreignCurrency =
+    currency && currency !== baseCurrency ? currency : null;
+  const hasBalance = balance != null && balance !== 0;
+  const startingDate = monthUtils.currentDay();
+
+  if (foreignCurrency) {
+    if (!baseCurrency) {
+      throw APIError(
+        'Select the currency of the budget before you add an account in a different currency',
+      );
+    }
+    if (getCurrency(foreignCurrency).code !== foreignCurrency) {
+      throw APIError(`Unknown currency: ${foreignCurrency}`);
+    }
+    // Find a missing rate before the account is made, so that a failed
+    // starting balance leaves no account behind
+    const rate = hasBalance
+      ? await getStoredRate({
+          from: foreignCurrency,
+          to: baseCurrency,
+          date: startingDate,
+        })
+      : null;
+    if (hasBalance && !rate) {
+      throw new MissingRateError({
+        from: foreignCurrency,
+        to: baseCurrency,
+        date: startingDate,
+      });
+    }
+  }
+
   const id: AccountEntity['id'] = await db.insertAccount({
     name,
     offbudget: offBudget ? 1 : 0,
     closed: closed ? 1 : 0,
+    ...(foreignCurrency && { currency: foreignCurrency }),
   });
 
   await db.insertPayee({
@@ -576,18 +634,42 @@ async function createAccount({
     transfer_acct: id,
   });
 
-  if (balance != null && balance !== 0) {
+  if (hasBalance) {
     const payee = await getStartingBalancePayee();
 
-    await db.insertTransaction({
-      account: id,
-      amount: amountToInteger(balance),
-      category: offBudget ? null : payee.category,
-      payee: payee.id,
-      date: monthUtils.currentDay(),
-      cleared: true,
-      starting_balance_flag: true,
-    });
+    if (foreignCurrency) {
+      // The balance is in the currency of the account, and the write
+      // path gives it its value in the base currency
+      await batchUpdateTransactions({
+        added: [
+          {
+            id: uuidv4(),
+            account: id,
+            amount: amountToInteger(balance, getDecimalPlaces(foreignCurrency)),
+            ...(!offBudget && payee.category
+              ? { category: payee.category }
+              : {}),
+            payee: payee.id,
+            date: startingDate,
+            cleared: true,
+            starting_balance_flag: true,
+          },
+        ],
+        amountSemantics: 'native',
+        runTransfers: false,
+        detectOrphanPayees: false,
+      });
+    } else {
+      await db.insertTransaction({
+        account: id,
+        amount: amountToInteger(balance),
+        category: offBudget ? null : payee.category,
+        payee: payee.id,
+        date: startingDate,
+        cleared: true,
+        starting_balance_flag: true,
+      });
+    }
   }
 
   return id;
@@ -621,7 +703,8 @@ async function closeAccount({
       return;
     }
 
-    const { balance, numTransactions } = await getAccountProperties({ id });
+    const { balance, baseBalance, numTransactions } =
+      await getAccountProperties({ id });
 
     // If there are no transactions, we can simply delete the account
     if (numTransactions === 0) {
@@ -691,10 +774,17 @@ async function closeAccount({
           );
         }
 
+        // For an account in a foreign currency, the two numbers take the
+        // balance and its stored value to zero together
+        const { foreignCurrencies } = await getForeignCurrencies();
+        const amounts = foreignCurrencies.has(id)
+          ? { native_amount: -balance, amount: -baseBalance }
+          : { amount: -balance };
+
         await mainApp.handlers['transaction-add']({
           id: uuidv4(),
           payee: transferPayee.id,
-          amount: -balance,
+          ...amounts,
           account: id,
           date: monthUtils.currentDay(),
           notes: 'Closing account',

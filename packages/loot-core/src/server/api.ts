@@ -45,6 +45,8 @@ import { aqlQuery } from './aql';
 import { isTrackingBudget } from './budget/actions';
 import * as cloudStorage from './cloud-storage';
 import type { RemoteFile } from './cloud-storage';
+import { checkAmountUpdate, validateRateRows } from './currencies/api-checks';
+import { saveRates } from './currencies/rates';
 import * as db from './db';
 import { APIError, withErrorCode } from './errors';
 import { runMutator } from './mutators';
@@ -657,6 +659,8 @@ handlers['api/transaction-update'] = withMutation(async function ({
     return [];
   }
 
+  await checkAmountUpdate({ stored: existing, fields });
+
   // `fields` is partial; updateTransaction replaces a split child wholesale
   const { diff } = updateTransaction(transactions, { ...existing, ...fields });
   return (await handlers['transactions-batch-update'](diff))['updated'];
@@ -744,6 +748,37 @@ handlers['api/account-balance'] = withMutation(async function ({
   checkFileOpen();
   return handlers['account-balance']({ id, cutoff });
 });
+
+handlers['api/account-market-value'] = async function ({ id }) {
+  checkFileOpen();
+  return handlers['account-market-value']({ id });
+};
+
+handlers['api/account-revalue'] = withMutation(async function ({
+  id,
+  category,
+  notes,
+}) {
+  checkFileOpen();
+  return handlers['account-revalue']({ id, category, notes });
+});
+
+// The two calls that store rates start a mutation of their own, and
+// mutations run one after the other. So they have no `withMutation`.
+handlers['api/exchange-rates-ensure'] = async function ({ requests }) {
+  checkFileOpen();
+  return handlers['rates-ensure']({ requests });
+};
+
+handlers['api/exchange-rates-save'] = async function ({ rates }) {
+  checkFileOpen();
+  await saveRates({ rates: validateRateRows(rates), source: 'manual' });
+};
+
+handlers['api/exchange-rate-get'] = async function ({ from, to, date }) {
+  checkFileOpen();
+  return handlers['rate-get']({ from, to, date });
+};
 
 handlers['api/account-groups-get'] = async function () {
   checkFileOpen();

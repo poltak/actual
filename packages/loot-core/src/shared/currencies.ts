@@ -71,6 +71,9 @@ export const currencies: Currency[] = [
   { code: 'USD', name: 'US Dollar', symbol: '$', decimalPlaces: 2, numberFormat: 'comma-dot', symbolFirst: true },
   { code: 'UYU', name: 'Uruguayan Peso', symbol: '$U', decimalPlaces: 2, numberFormat: 'dot-comma', symbolFirst: true },
   { code: 'UZS', name: 'Uzbek Soum', symbol: 'UZS', decimalPlaces: 2, numberFormat: 'space-comma', symbolFirst: false },
+  // VND has no minor unit in daily use. It keeps 2 decimal places here because the
+  // transaction table and the importers still store every amount times 100.
+  { code: 'VND', name: 'Vietnamese Dong', symbol: '₫', decimalPlaces: 2, numberFormat: 'dot-comma', symbolFirst: false },
 ];
 
 export function getCurrency(code: string): Currency {

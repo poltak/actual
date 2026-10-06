@@ -20,6 +20,12 @@ describe('getDecimalPlaces', () => {
   it('returns 2 as safe default for unknown codes', () => {
     expect(getDecimalPlaces('XYZ')).toBe(2);
   });
+
+  it('returns 2 for VND, because every amount is still stored times 100', () => {
+    // A change to 0 here would divide all stored VND amounts by 100 on screen.
+    expect(currencies.some(currency => currency.code === 'VND')).toBe(true);
+    expect(getDecimalPlaces('VND')).toBe(2);
+  });
 });
 
 describe('currency metadata', () => {

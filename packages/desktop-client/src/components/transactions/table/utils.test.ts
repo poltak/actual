@@ -6,6 +6,8 @@ import {
   deserializeTransaction,
   formatAmount,
   formatTypedAmount,
+  getInitialCleared,
+  makeTemporaryTransactions,
   serializeTransaction,
   shouldApplyRuleChange,
 } from './utils';
@@ -189,5 +191,51 @@ describe('amounts in the currency of an account', () => {
       deserializeTransaction({ ...serialized, debit: '1.500' }, usdRow, 'JPY')
         .amount,
     ).toBe(-1500);
+  });
+});
+
+describe('the draft of a new manual transaction', () => {
+  test('starts as cleared', () => {
+    const [draft] = makeTemporaryTransactions('account-1', null);
+
+    expect(draft.cleared).toBe(true);
+  });
+
+  test('keeps its other start values', () => {
+    const [draft, ...others] = makeTemporaryTransactions(
+      'account-1',
+      'category-1',
+      '2026-10-01',
+    );
+
+    expect(others).toEqual([]);
+    expect(draft).toMatchObject({
+      id: 'temp',
+      account: 'account-1',
+      category: 'category-1',
+      date: '2026-10-01',
+      amount: null,
+    });
+  });
+
+  test('has no account and no category when the page gives none', () => {
+    const [draft] = makeTemporaryTransactions(null, undefined);
+
+    expect(draft.account).toBeNull();
+    expect(draft.category).toBeUndefined();
+  });
+});
+
+describe('getInitialCleared', () => {
+  test('is true when a link to the mobile form says nothing', () => {
+    expect(getInitialCleared(null)).toBe(true);
+  });
+
+  test('follows the cleared parameter of a link, as before', () => {
+    expect(getInitialCleared('true')).toBe(true);
+    expect(getInitialCleared('false')).toBe(false);
+    // Before the change, each value that is not "true" gave false
+    expect(getInitialCleared('')).toBe(false);
+    expect(getInitialCleared('yes')).toBe(false);
   });
 });

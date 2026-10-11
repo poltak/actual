@@ -88,6 +88,7 @@ import {
 } from '#components/transactions/table/TableCurrencyContext';
 import {
   formatAmount,
+  getInitialCleared,
   shouldApplyRuleChange,
 } from '#components/transactions/table/utils';
 import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
@@ -1761,7 +1762,7 @@ function TransactionEditUnconnected({
           amount: -amountToInteger(
             parseFloat(searchParams.get('amount') || '') || 0,
           ),
-          cleared: searchParams.get('cleared') === 'true',
+          cleared: getInitialCleared(searchParams.get('cleared')),
           notes: searchParams.get('notes') || '',
         },
       ]);

@@ -1072,6 +1072,96 @@ describe('Transactions', () => {
     expect(queryNewField(container, 'debit').textContent).toBe('0.00');
   });
 
+  test('a new transaction is cleared when the user does not change that', async () => {
+    const { container, getTransactions, updateProps } = renderTransactions();
+    updateProps({ isAdding: true });
+
+    const input = await editNewField(container, 'debit');
+    await userEvent.clear(input);
+    await userEvent.type(input, '100[Enter]');
+
+    expect(getTransactions().length).toBe(6);
+    expect(getTransactions()[0].amount).toBe(-10000);
+    expect(getTransactions()[0].cleared).toBe(true);
+  });
+
+  test('a new transaction that the user unticks is saved as not cleared, and the next draft is cleared again', async () => {
+    const { container, getTransactions, updateProps } = renderTransactions();
+    updateProps({ isAdding: true });
+
+    await userEvent.click(
+      within(queryNewField(container, 'cleared')).getByTestId('cell-button'),
+    );
+    let input = await editNewField(container, 'debit');
+    await userEvent.clear(input);
+    await userEvent.type(input, '100[Enter]');
+
+    expect(getTransactions().length).toBe(6);
+    expect(getTransactions()[0].amount).toBe(-10000);
+    expect(getTransactions()[0].cleared).toBe(false);
+
+    // The form is ready for the next transaction, with a new draft
+    input = await editNewField(container, 'debit');
+    await userEvent.clear(input);
+    await userEvent.type(input, '200[Enter]');
+
+    expect(getTransactions().length).toBe(7);
+    expect(getTransactions()[0].amount).toBe(-20000);
+    expect(getTransactions()[0].cleared).toBe(true);
+    // The transaction from before keeps the choice of the user
+    expect(getTransactions()[1].amount).toBe(-10000);
+    expect(getTransactions()[1].cleared).toBe(false);
+  });
+
+  test('a new split transaction gives its cleared state to its parts', async () => {
+    const { container, getTransactions, updateProps } = renderTransactions();
+    updateProps({ isAdding: true });
+
+    let input = await editNewField(container, 'debit');
+    await userEvent.clear(input);
+    await userEvent.type(input, '55.00');
+
+    await editNewField(container, 'category');
+    await userEvent.click(screen.getByTestId('split-transaction-button'));
+    await waitForAutocomplete();
+    await waitForAutocomplete();
+    await waitForAutocomplete();
+
+    input = await editNewField(container, 'debit', 1);
+    await userEvent.clear(input);
+    await userEvent.type(input, '45.00');
+    input = await editNewField(container, 'debit', 2);
+    await userEvent.clear(input);
+    await userEvent.type(input, '10.00');
+    await userEvent.tab();
+
+    await userEvent.click(
+      container.querySelector('[data-testid="add-button"]')!,
+    );
+
+    // The parent and its two parts
+    expect(getTransactions().length).toBe(8);
+    expect(getTransactions()[0].is_parent).toBe(true);
+    expect(
+      getTransactions()
+        .slice(0, 3)
+        .map(transaction => transaction.cleared),
+    ).toEqual([true, true, true]);
+  });
+
+  test('an edit of a transaction that is not cleared does not clear it', async () => {
+    const { container, getTransactions } = renderTransactions();
+    // The mock transactions are not cleared
+    expect(getTransactions()[1].cleared).toBe(false);
+
+    const input = await editField(container, 'notes', 1);
+    await userEvent.clear(input);
+    await userEvent.type(input, 'an edit[Enter]');
+
+    expect(getTransactions()[1].notes).toBe('an edit');
+    expect(getTransactions()[1].cleared).toBe(false);
+  });
+
   test('clicking cleared while editing the amount keeps the amount', async () => {
     const { container, updateProps } = renderTransactions({
       // Rules run over the backend, so saving a new transaction only lands in

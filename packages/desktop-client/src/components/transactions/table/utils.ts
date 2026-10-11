@@ -221,6 +221,23 @@ export function shouldApplyRuleChange(
   return !alreadyApplied;
 }
 
+// In this fork, a transaction that a person enters by hand starts as
+// cleared. The person can untick it before the save, and that choice is
+// saved. This is only the start value of a new draft. It does not
+// change a stored transaction, an import, a schedule, or the API.
+export const NEW_TRANSACTION_CLEARED = true;
+
+/**
+ * The cleared state of a new draft in the mobile form. A link to the
+ * form can set it with the `cleared` parameter, as before. With no
+ * parameter, the draft gets the start value.
+ */
+export function getInitialCleared(clearedParam: string | null): boolean {
+  return clearedParam == null
+    ? NEW_TRANSACTION_CLEARED
+    : clearedParam === 'true';
+}
+
 export function makeTemporaryTransactions(
   currentAccountId: AccountEntity['id'] | null | undefined,
   currentCategoryId: CategoryEntity['id'] | null | undefined,
@@ -233,7 +250,7 @@ export function makeTemporaryTransactions(
       // TODO: consider making this default to an empty string
       account: (currentAccountId || null) as string,
       category: currentCategoryId || undefined,
-      cleared: false,
+      cleared: NEW_TRANSACTION_CLEARED,
       // TODO: either make this nullable or find a way to make this not null
       amount: null as unknown as number,
     },

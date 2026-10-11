@@ -93,6 +93,7 @@ import {
 import {
   formatAmount,
   getClearedFieldNames,
+  getInitialCleared,
   shouldApplyRuleChange,
   trackClearedField,
 } from '#components/transactions/table/utils';
@@ -1806,7 +1807,7 @@ function TransactionEditUnconnected({
           amount: -amountToInteger(
             parseFloat(searchParams.get('amount') || '') || 0,
           ),
-          cleared: searchParams.get('cleared') === 'true',
+          cleared: getInitialCleared(searchParams.get('cleared')),
           notes: searchParams.get('notes') || '',
         },
       ]);

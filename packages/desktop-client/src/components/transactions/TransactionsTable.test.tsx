@@ -170,6 +170,7 @@ type LiveTransactionTableProps = {
   isAdding: boolean;
   onTransactionsChange?: (newTrans: TransactionEntity[]) => void;
   onCloseAddTransaction?: () => void;
+  isAddStopped?: boolean;
   onApplyRules?: (
     transaction: TransactionEntity,
     updatedFieldName?: string | null,
@@ -199,9 +200,13 @@ function LiveTransactionTable(props: LiveTransactionTableProps) {
     setTransactions(data);
   };
 
-  const onAdd = (newTransactions: TransactionEntity[]) => {
+  const onAdd = async (newTransactions: TransactionEntity[]) => {
+    if (props.isAddStopped) {
+      return false;
+    }
     newTransactions = realizeTempTransactions(newTransactions);
     setTransactions(trans => [...newTransactions, ...trans]);
+    return true;
   };
 
   const onAddSplit = (id: string) => {
@@ -1128,6 +1133,24 @@ describe('Transactions', () => {
     expect(queryNewField(container, 'debit').textContent).toBe('0.00');
   });
 
+  test('a new transaction stays in the form when its save stops', async () => {
+    const { container, getTransactions, updateProps } = renderTransactions();
+    updateProps({ isAdding: true, isAddStopped: true });
+
+    let input = await editNewField(container, 'notes');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'a transaction');
+    input = await editNewField(container, 'debit');
+    await userEvent.clear(input);
+    await userEvent.type(input, '100[Enter]');
+
+    expect(getTransactions().length).toBe(5);
+    await waitFor(() =>
+      expect(queryNewField(container, 'debit').textContent).toBe('100.00'),
+    );
+    expect(queryNewField(container, 'notes').textContent).toBe('a transaction');
+  });
+
   test('a new transaction is cleared when the user does not change that', async () => {
     const { container, getTransactions, updateProps } = renderTransactions();
     updateProps({ isAdding: true });
@@ -1617,8 +1640,11 @@ describe('Transactions', () => {
     expect(getTransactions()[0].amount).toBe(-5000);
     expect(getTransactions()[0].notes).toBe('test transaction');
 
-    expect(container.querySelector('[data-testid="new-transaction"]')).toBe(
-      null,
+    // The form closes after the save
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="new-transaction"]')).toBe(
+        null,
+      ),
     );
   });
 
@@ -1714,8 +1740,11 @@ describe('Transactions', () => {
     expect(getTransactions()[0].amount).toBe(-5000);
     expect(getTransactions()[0].notes).toBe('test transaction');
 
-    expect(container.querySelector('[data-testid="new-transaction"]')).toBe(
-      null,
+    // The form closes after the save
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="new-transaction"]')).toBe(
+        null,
+      ),
     );
   });
 

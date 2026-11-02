@@ -2711,7 +2711,8 @@ type TransactionTableInnerProps = {
   onSplit: (id: TransactionEntity['id']) => void;
   onAddSplit: (id: TransactionEntity['id']) => void;
   onCloseAddTransaction: () => void;
-  onAdd: (transactions: TransactionEntity[]) => void;
+  // Gives false when the save stopped and the entry must stay
+  onAdd: (transactions: TransactionEntity[]) => void | Promise<boolean>;
   onCreatePayee: (name: string) => Promise<null | PayeeEntity['id']>;
   style?: CSSProperties;
   onNavigateToTransferAccount: NavigateToTransferAccount;
@@ -3129,7 +3130,8 @@ export type TransactionTableProps = {
   onSplit: (id: TransactionEntity['id']) => TransactionEntity['id'];
   onAddSplit: (id: TransactionEntity['id']) => TransactionEntity['id'];
   onCloseAddTransaction: () => void;
-  onAdd: (transactions: TransactionEntity[]) => void;
+  // Gives false when the save stopped and the entry must stay
+  onAdd: (transactions: TransactionEntity[]) => void | Promise<boolean>;
   onCreatePayee: (name: string) => Promise<null | PayeeEntity['id']>;
   style?: CSSProperties;
   onNavigateToTransferAccount: NavigateToTransferAccount;
@@ -3410,6 +3412,7 @@ export const TransactionTable = forwardRef(
     );
     const shouldSchedule = useRef(false);
     const shouldAdd = useRef(false);
+    const isAddPending = useRef(false);
     const shouldAddAndClose = useRef(false);
     const pendingConvertToSchedule = useRef<null | {
       daysUntilTransaction: number;
@@ -3471,8 +3474,18 @@ export const TransactionTable = forwardRef(
         const transactions = latestState.current.newTransactions;
 
         if (shouldAddAndClose.current) {
-          props.onAdd(transactions);
-          props.onCloseAddTransaction();
+          if (!isAddPending.current) {
+            isAddPending.current = true;
+            void Promise.resolve(props.onAdd(transactions))
+              .then(isSaved => {
+                if (isSaved !== false) {
+                  props.onCloseAddTransaction();
+                }
+              })
+              .finally(() => {
+                isAddPending.current = false;
+              });
+          }
         } else {
           const lastDate =
             transactions.length > 0 ? transactions[0].date : null;
@@ -3485,7 +3498,14 @@ export const TransactionTable = forwardRef(
             ),
           );
           newNavigator.onEdit('temp', 'date');
-          props.onAdd(transactions);
+          void Promise.resolve(props.onAdd(transactions)).then(isSaved => {
+            if (isSaved === false) {
+              // Give the entry back, unless the user started the next one
+              setNewTransactions(current =>
+                isBlankDraft(current) ? transactions : current,
+              );
+            }
+          });
         }
       }
       shouldAdd.current = false;
@@ -4219,3 +4239,14 @@ const getGroupByCatId = memoizeOne(
     return res;
   },
 );
+
+function isBlankDraft(transactions: TransactionEntity[]) {
+  const [first] = transactions;
+  return (
+    transactions.length === 1 &&
+    !first.amount &&
+    !first.payee &&
+    !first.notes &&
+    !first.category
+  );
+}

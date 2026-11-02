@@ -6,6 +6,7 @@ import * as asyncStorage from '#platform/server/asyncStorage';
 import { logger } from '#platform/server/log';
 import { aqlQuery } from '#server/aql';
 import { planCurrencyWrites } from '#server/currencies/plan';
+import { ensureRatesForAccount } from '#server/currencies/rates';
 import * as db from '#server/db';
 import { TRANSACTION_SORT_INCREMENT } from '#server/db/sort';
 import { TransactionError } from '#server/errors';
@@ -1140,6 +1141,13 @@ async function processBankSyncDownload(
     transactions: originalTransactions,
     startingBalance: currentBalance,
   } = download;
+
+  // The write below cannot wait for a download. A failed download is
+  // fine: the write then uses a nearby stored rate.
+  await ensureRatesForAccount({
+    accountId: id,
+    dates: [...new Set<string>(originalTransactions.map(({ date }) => date))],
+  });
 
   if (initialSync) {
     const { transactions } = download;

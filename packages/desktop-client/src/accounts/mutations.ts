@@ -23,6 +23,7 @@ import { addNotification } from '#notifications/notificationsSlice';
 import { payeeQueries } from '#payees';
 import { useDispatch, useStore } from '#redux';
 import type { AppDispatch } from '#redux/store';
+import { ensureAccountRatesOrNotify } from '#transactions/exchangeRates';
 import { setNewTransactions } from '#transactions/transactionsSlice';
 
 import {
@@ -292,6 +293,16 @@ export function useImportTransactionsMutation() {
       reconcile,
       reimportDeleted,
     }: ImportTransactionsPayload) => {
+      // The server cannot wait for a download while it saves
+      const hasRates = await ensureAccountRatesOrNotify({
+        accountId,
+        dates: [...new Set(transactions.map(({ date }) => date))],
+        dispatch,
+      });
+      if (!hasRates) {
+        return false;
+      }
+
       if (!reconcile) {
         await send('api/transactions-add', {
           accountId,

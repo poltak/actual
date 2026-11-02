@@ -86,7 +86,8 @@ describe('Budgets', () => {
 
     // Make sure the clock has been loaded
     expect(getClock()).toEqual(deserializeClock(row.clock));
-  });
+    // Loading runs every migration, which is slow on a disk with slow syncs
+  }, 30_000);
 
   test('a second request for the budget being loaded waits for that load', async () => {
     await createTestBudget('default-budget-template');

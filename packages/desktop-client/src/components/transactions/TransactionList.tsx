@@ -256,8 +256,8 @@ export function TransactionList({
 
   const onAdd = useCallback(
     async (newTransactions: TransactionEntity[]) => {
-      newTransactions = realizeTempTransactions(newTransactions);
-      const diff = await prepareDiff({ added: newTransactions });
+      const savedTransactions = realizeTempTransactions(newTransactions);
+      const diff = await prepareDiff({ added: savedTransactions });
       if (diff) {
         await saveDiff(diff, isLearnCategoriesEnabled);
       }
@@ -266,7 +266,7 @@ export function TransactionList({
       // The server gave the other side of a new transfer between two
       // currencies an amount from the exchange rate. The real amount is
       // almost never that number, so the dialog asks for it.
-      const transfer = newTransactions.find(row => {
+      const transfer = savedTransactions.find(row => {
         const otherAccount = transferAccountOf(row.payee);
         return (
           otherAccount != null &&
@@ -284,6 +284,8 @@ export function TransactionList({
           }),
         );
       }
+
+      return diff != null;
     },
     [
       dispatch,

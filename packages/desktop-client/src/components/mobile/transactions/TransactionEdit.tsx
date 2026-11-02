@@ -645,7 +645,12 @@ type TransactionEditInnerProps = {
   payees: PayeeEntity[];
   dateFormat: string;
   transactions: TransactionEntity[];
-  onSave: (transactions: TransactionEntity[]) => void;
+  // `onReady` runs when the save can go on. It does not run when the
+  // save stops, so the user keeps the form and what they typed.
+  onSave: (
+    transactions: TransactionEntity[],
+    onReady: () => void,
+  ) => Promise<void>;
   onUpdate: <Field extends keyof TransactionEntity>(
     transaction: TransactionEntity,
     field: Field,
@@ -793,8 +798,7 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
           );
         }
 
-        onSave(transactionsToSave);
-        void navigate(-1);
+        void onSave(transactionsToSave, () => void navigate(-1));
       };
 
       if (unserializedTransactions.some(t => t.reconciled)) {
@@ -1985,8 +1989,9 @@ function TransactionEditUnconnected({
   );
 
   const onSave = useCallback(
-    async (newTransactions: TransactionEntity[]) => {
+    async (newTransactions: TransactionEntity[], onReady: () => void) => {
       if (isDeleted.current) {
+        onReady();
         return;
       }
 
@@ -2012,6 +2017,7 @@ function TransactionEditUnconnected({
         if (!(await ensureRatesOrNotify({ requests, dispatch }))) {
           return;
         }
+        onReady();
         const diff = toDbDiff({
           diff: changes,
           isInViewForm: account => foreignCurrencyOf(account) != null,
@@ -2055,6 +2061,8 @@ function TransactionEditUnconnected({
         //     updated: changes.updated.concat(remoteUpdates),
         //   });
         // }
+      } else {
+        onReady();
       }
 
       if (isAdding.current) {

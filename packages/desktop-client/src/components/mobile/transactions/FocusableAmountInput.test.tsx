@@ -4,18 +4,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FocusableAmountInput } from './FocusableAmountInput';
 
-const mockPrefs = vi.hoisted(() => ({ currencyCode: 'JPY' }));
+const prefs = vi.hoisted(() => ({
+  values: {} as Record<string, string>,
+}));
 
 vi.mock('#hooks/useSyncedPref', () => ({
-  useSyncedPref: (name: string) => [
-    name === 'defaultCurrencyCode' ? mockPrefs.currencyCode : undefined,
-    vi.fn(),
-  ],
+  useSyncedPref: (name: string) => [prefs.values[name], vi.fn()],
 }));
 
 describe('FocusableAmountInput', () => {
   beforeEach(() => {
-    mockPrefs.currencyCode = 'JPY';
+    prefs.values = { defaultCurrencyCode: 'JPY' };
   });
 
   it('takes typed digits as whole units in a currency without decimals', () => {
@@ -60,7 +59,7 @@ describe('FocusableAmountInput', () => {
   });
 
   it('treats a pasted number as an amount in a currency with decimals', () => {
-    mockPrefs.currencyCode = '';
+    prefs.values = { defaultCurrencyCode: '' };
     setNumberFormat({ format: 'comma-dot', hideFraction: false });
     render(<FocusableAmountInput value={0} focused />);
 
@@ -93,5 +92,21 @@ describe('FocusableAmountInput', () => {
 
     input.setSelectionRange(0, input.value.length);
     expect(fireEvent.paste(input, { clipboardData })).toBe(false);
+  });
+
+  it('keeps the decimals of an account currency when the budget hides them', () => {
+    prefs.values = {
+      defaultCurrencyCode: 'VND',
+      hideFraction: 'true',
+      numberFormat: 'dot-comma',
+    };
+    setNumberFormat({ format: 'dot-comma', hideFraction: true });
+    render(<FocusableAmountInput value={0} focused currency="USD" />);
+
+    const input = screen.getByTestId<HTMLInputElement>('amount-input');
+    for (const digit of '1250') {
+      fireEvent.change(input, { target: { value: input.value + digit } });
+    }
+    expect(input.value).toBe('12,50');
   });
 });

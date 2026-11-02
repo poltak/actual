@@ -1,7 +1,4 @@
-import {
-  getCurrency,
-  getDecimalPlaces,
-} from '@actual-app/core/shared/currencies';
+import { getCurrency } from '@actual-app/core/shared/currencies';
 import {
   dayFromDate,
   getDayMonthFormat,
@@ -115,7 +112,6 @@ export function transactionsSearch(
     ? null
     : currencyToAmount(amountSearch.trim());
   const amountField = foreignCurrency ? 'native_amount' : 'amount';
-  const decimalPlaces = foreignCurrency ? getDecimalPlaces(foreignCurrency) : 2;
   const escapedSearch = search.replace(/[\\%?]/g, '\\$&');
 
   // Support various date formats
@@ -140,15 +136,13 @@ export function transactionsSearch(
         amount != null && {
           [amountField]: {
             $transform: '$abs',
-            $eq: amountToInteger(amount, decimalPlaces),
+            $eq: amountToInteger(amount),
           },
         },
         amount != null &&
           Number.isInteger(amount) && {
             [amountField]: {
-              $transform: {
-                $abs: { $idiv: ['$', Math.pow(10, decimalPlaces)] },
-              },
+              $transform: { $abs: { $idiv: ['$', 100] } },
               $eq: amount,
             },
           },

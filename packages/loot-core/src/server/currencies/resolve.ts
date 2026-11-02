@@ -222,8 +222,6 @@ export function resolveRowAmounts({
     convertAmount({
       amount: native,
       rate,
-      fromCurrency: accountCurrency,
-      toCurrency: baseCurrency,
     }),
     sentLock === true,
   );

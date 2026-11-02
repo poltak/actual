@@ -238,12 +238,11 @@ export function useFormat(currencyCode?: string | null): UseFormatResult {
       const amount = integerToAmount(value);
       // Show a stored fraction (¥1,500.50) so saving the text unedited
       // doesn't round it away, unless fractions are hidden
-      const decimalPlaces =
-        hideFraction
-          ? 0
-          : value % 100 !== 0
-            ? 2
-            : activeCurrency.decimalPlaces;
+      const decimalPlaces = hideFraction
+        ? 0
+        : value % 100 !== 0
+          ? 2
+          : activeCurrency.decimalPlaces;
       const editFormatter = getNumberFormat({
         format: numberFormatConfig.format,
         decimalPlaces,

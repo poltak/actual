@@ -453,8 +453,6 @@ export async function planCurrencyWrites({
         convertAmount({
           amount: -result.amount,
           rate: 1 / rate,
-          fromCurrency: baseCurrency,
-          toCurrency: targetCurrency,
         }),
       );
     }

@@ -13,6 +13,7 @@ import { View } from '@actual-app/components/view';
 import { send } from '@actual-app/core/platform/client/connection';
 import { impliedRate } from '@actual-app/core/shared/currency-conversion';
 import { q } from '@actual-app/core/shared/query';
+import { amountToInteger } from '@actual-app/core/shared/util';
 import type { TransactionEntity } from '@actual-app/core/types/models';
 
 import {
@@ -123,8 +124,6 @@ export function TransactionAmountsModal({
     ? impliedRate({
         fromAmount: amount,
         toAmount: transaction.amount,
-        fromCurrency: currency,
-        toCurrency: baseCurrency,
       })
     : null;
 
@@ -270,13 +269,7 @@ export function TransactionAmountsModal({
                       <Trans>
                         This value is{' '}
                         {{
-                          rate: formatBase(
-                            Math.round(
-                              rate *
-                                Math.pow(10, formatBase.currency.decimalPlaces),
-                            ),
-                            'financial',
-                          ),
+                          rate: formatBase(amountToInteger(rate), 'financial'),
                         }}{' '}
                         for 1 {{ currency }}.
                       </Trans>

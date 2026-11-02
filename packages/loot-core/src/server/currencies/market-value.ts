@@ -105,8 +105,6 @@ export async function getAccountMarketValue({
   const marketValue = convertAmount({
     amount: balance,
     rate: rate.rate,
-    fromCurrency: currency,
-    toCurrency: baseCurrency,
   });
   return {
     currency,

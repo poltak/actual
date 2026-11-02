@@ -147,8 +147,8 @@ type TransactionListProps = Pick<
 
 export function TransactionList({
   tableRef,
-  transactions,
-  allTransactions,
+  transactions: pageRows,
+  allTransactions: allRows,
   loadMoreTransactions,
   account,
   accounts,
@@ -201,14 +201,8 @@ export function TransactionList({
   const { baseCurrency, foreignCurrencyOf } = useAccountCurrencies();
   const pageCurrency = foreignCurrencyOf(account?.id);
   const hasViewRows = pageCurrency != null;
-  transactions = useMemo(
-    () => (hasViewRows ? transactions.map(toView) : transactions),
-    [hasViewRows, transactions],
-  );
-  allTransactions = useMemo(
-    () => (hasViewRows ? allTransactions.map(toView) : allTransactions),
-    [hasViewRows, allTransactions],
-  );
+  const transactions = hasViewRows ? pageRows.map(toView) : pageRows;
+  const allTransactions = hasViewRows ? allRows.map(toView) : allRows;
 
   const transactionsLatest = useRef<readonly TransactionEntity[]>([]);
   useLayoutEffect(() => {
@@ -658,58 +652,58 @@ export function TransactionList({
         transferAccountOf={transferAccountOf}
         onRefetch={onRefetch}
       >
-      <TransactionTable
-        ref={tableRef}
-        transactions={allTransactions}
-        focusedTransactionId={focusedTransactionId}
-        onFocusedTransactionShown={onFocusedTransactionShown}
-        loadMoreTransactions={loadMoreTransactions}
-        accounts={accounts}
-        categoryGroups={categoryGroups}
-        payees={payees}
-        balances={balances}
-        showBalances={showBalances}
-        showReconciled={showReconciled}
-        showCleared={showCleared}
-        showAccount={showAccount}
-        showCategory
-        showGroup={showGroup}
-        columnOrder={columnOrder}
-        currentAccountId={account && account.id}
-        currentCategoryId={category && category.id}
-        isAdding={isAdding}
-        isNew={isNew}
-        isMatched={isMatched}
-        dateFormat={dateFormat}
-        hideFraction={hideFraction}
-        renderEmpty={renderEmpty}
-        onSave={onSave}
-        onApplyRules={onApplyRules}
-        onSplit={onSplit}
-        onCloseAddTransaction={onCloseAddTransaction}
-        onAdd={onAdd}
-        onAddSplit={onAddSplit}
-        onManagePayees={onManagePayees}
-        onCreatePayee={onCreatePayee}
-        style={{ backgroundColor: theme.tableBackground }}
-        onNavigateToTransferAccount={onNavigateToTransferAccount}
-        onNavigateToSchedule={onNavigateToSchedule}
-        onNotesTagClick={onNotesTagClick}
-        onSort={onSort}
-        sortField={sortField}
-        ascDesc={ascDesc}
-        isFiltered={isFiltered}
-        onReorder={allowReorder ? onReorder : undefined}
-        onBatchDelete={onBatchDelete}
-        onBatchDuplicate={onBatchDuplicate}
-        onBatchLinkSchedule={onBatchLinkSchedule}
-        onBatchUnlinkSchedule={onBatchUnlinkSchedule}
-        onCreateRule={onCreateRule}
-        onScheduleAction={onScheduleAction}
-        onMakeAsNonSplitTransactions={onMakeAsNonSplitTransactions}
-        showSelection={showSelection}
-        allowSplitTransaction={allowSplitTransaction}
-      />
+        <TransactionTable
+          ref={tableRef}
+          transactions={allTransactions}
+          focusedTransactionId={focusedTransactionId}
+          onFocusedTransactionShown={onFocusedTransactionShown}
+          loadMoreTransactions={loadMoreTransactions}
+          accounts={accounts}
+          categoryGroups={categoryGroups}
+          payees={payees}
+          balances={balances}
+          showBalances={showBalances}
+          showReconciled={showReconciled}
+          showCleared={showCleared}
+          showAccount={showAccount}
+          showCategory
+          showGroup={showGroup}
+          columnOrder={columnOrder}
+          currentAccountId={account && account.id}
+          currentCategoryId={category && category.id}
+          isAdding={isAdding}
+          isNew={isNew}
+          isMatched={isMatched}
+          dateFormat={dateFormat}
+          hideFraction={hideFraction}
+          renderEmpty={renderEmpty}
+          onSave={onSave}
+          onApplyRules={onApplyRules}
+          onSplit={onSplit}
+          onCloseAddTransaction={onCloseAddTransaction}
+          onAdd={onAdd}
+          onAddSplit={onAddSplit}
+          onManagePayees={onManagePayees}
+          onCreatePayee={onCreatePayee}
+          style={{ backgroundColor: theme.tableBackground }}
+          onNavigateToTransferAccount={onNavigateToTransferAccount}
+          onNavigateToSchedule={onNavigateToSchedule}
+          onNotesTagClick={onNotesTagClick}
+          onSort={onSort}
+          sortField={sortField}
+          ascDesc={ascDesc}
+          isFiltered={isFiltered}
+          onReorder={allowReorder ? onReorder : undefined}
+          onBatchDelete={onBatchDelete}
+          onBatchDuplicate={onBatchDuplicate}
+          onBatchLinkSchedule={onBatchLinkSchedule}
+          onBatchUnlinkSchedule={onBatchUnlinkSchedule}
+          onCreateRule={onCreateRule}
+          onScheduleAction={onScheduleAction}
+          onMakeAsNonSplitTransactions={onMakeAsNonSplitTransactions}
+          showSelection={showSelection}
+          allowSplitTransaction={allowSplitTransaction}
+        />
       </TableCurrencyProvider>
     </ErrorBoundary>
   );

@@ -85,8 +85,6 @@ export function ForeignAccountValue({
       : convertAmount({
           amount: balance,
           rate,
-          fromCurrency: currency,
-          toCurrency: baseCurrency,
         });
   const hasDifference = marketValue != null && marketValue !== storedValue;
 

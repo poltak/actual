@@ -39,11 +39,8 @@ export const SplitAmountInput = memo(function SplitAmountInput({
 }: SplitAmountInputProps) {
   const mobileCalculatorEnabled = useFeatureFlag('mobileCalculator');
   const [hideFraction] = useSyncedPref('hideFraction');
-  // The form keeps amounts as numbers with decimals. An integer amount
-  // has the decimal places of its currency.
-  const decimalPlaces = currency ? getDecimalPlaces(currency) : 2;
   const hasAutoDecimals = currency
-    ? decimalPlaces > 0
+    ? getDecimalPlaces(currency) > 0
     : String(hideFraction) !== 'true';
   const [focused, setFocused] = useState(autoFocus);
 
@@ -96,13 +93,13 @@ export const SplitAmountInput = memo(function SplitAmountInput({
         onFocus?.(event);
       }}
       onUpdate={amount => {
-        const nextAmount = integerToAmount(amount, decimalPlaces);
+        const nextAmount = integerToAmount(amount);
         if (nextAmount !== value) {
           onChange?.(nextAmount);
         }
       }}
       style={{ marginRight: 8 }}
-      value={amountToInteger(value, decimalPlaces)}
+      value={amountToInteger(value)}
       zeroSign={negate ? '-' : '+'}
     />
   );

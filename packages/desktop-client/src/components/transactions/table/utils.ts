@@ -118,8 +118,6 @@ export function serializeTransaction(
 export function deserializeTransaction(
   transaction: SerializedTransaction,
   originalTransaction: TransactionEntity,
-  // The currency of the amount when it is not the currency of the budget
-  currencyCode?: string | null,
 ) {
   const { debit, credit, date: originalDate, ...realTransaction } = transaction;
 
@@ -133,10 +131,7 @@ export function deserializeTransaction(
 
   amount =
     amount != null
-      ? amountToInteger(
-          amount,
-          currencyCode ? getDecimalPlaces(currencyCode) : undefined,
-        )
+      ? amountToInteger(amount)
       : (realTransaction.amount ?? originalTransaction.amount);
   let date = originalDate;
   if (date == null) {

@@ -5,9 +5,13 @@ import { mutator } from '#server/mutators';
 import * as prefs from '#server/prefs';
 import { undoable } from '#server/undo';
 
-import { getBaseCurrency, isForeignCurrency } from './base-currency';
 import { getAccountMarketValue, revalueAccount } from './market-value';
-import { ensureRates, getStoredRate, refreshRatesOfToday } from './rates';
+import {
+  ensureRates,
+  ensureRatesForAccount,
+  getStoredRate,
+  refreshRatesOfToday,
+} from './rates';
 import type { RateRequest, StoredRate } from './rates';
 
 export type CurrenciesHandlers = {
@@ -35,34 +39,6 @@ async function ensureRatesForClient({
   requests: RateRequest[];
 }): Promise<{ missing: RateRequest[] }> {
   return ensureRates({ requests });
-}
-
-// For a screen that has an account and some dates, and does not know
-// the currencies. An account in the currency of the budget needs no rate.
-async function ensureRatesForAccount({
-  accountId,
-  dates,
-}: {
-  accountId: string;
-  dates: string[];
-}): Promise<{ missing: RateRequest[] }> {
-  const baseCurrency = await getBaseCurrency();
-  const account = await db.first<Pick<db.DbAccount, 'currency'>>(
-    'SELECT currency FROM accounts WHERE id = ?',
-    [accountId],
-  );
-  const currency = account?.currency;
-  if (
-    !baseCurrency ||
-    !currency ||
-    !isForeignCurrency({ currency, baseCurrency })
-  ) {
-    return { missing: [] };
-  }
-
-  return ensureRates({
-    requests: dates.map(date => ({ from: currency, to: baseCurrency, date })),
-  });
 }
 
 async function getRate(request: RateRequest): Promise<StoredRate | null> {

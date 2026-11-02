@@ -292,6 +292,36 @@ export async function ensureRates({
   return { missing };
 }
 
+/**
+ * The rates for some dates of one account, when the caller does not know
+ * the currencies. An account in the currency of the budget needs no rate.
+ */
+export async function ensureRatesForAccount({
+  accountId,
+  dates,
+}: {
+  accountId: string;
+  dates: string[];
+}): Promise<{ missing: RateRequest[] }> {
+  const baseCurrency = await getBaseCurrency();
+  const account = await db.first<Pick<db.DbAccount, 'currency'>>(
+    'SELECT currency FROM accounts WHERE id = ?',
+    [accountId],
+  );
+  const currency = account?.currency;
+  if (
+    !baseCurrency ||
+    !currency ||
+    !isForeignCurrency({ currency, baseCurrency })
+  ) {
+    return { missing: [] };
+  }
+
+  return ensureRates({
+    requests: dates.map(date => ({ from: currency, to: baseCurrency, date })),
+  });
+}
+
 let lastRefreshAttempt = 0;
 
 /**

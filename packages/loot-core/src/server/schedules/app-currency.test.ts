@@ -160,6 +160,55 @@ describe('a schedule in a foreign currency account', () => {
     ]);
   });
 
+  it('gets the exact rate of a date that has only a nearby rate', async () => {
+    await db.update('preferences', {
+      id: 'exchangeRateProvider',
+      value: 'frankfurter',
+    });
+    await saveRates({
+      rates: [
+        { from: 'USD', to: 'VND', date: '2016-12-02', rate: 20000 },
+        { from: 'USD', to: 'VND', date: SECOND, rate: 26000 },
+      ],
+      source: 'manual',
+    });
+    const id = await addLateSchedule({ account: 'wise-usd', amount: -1599 });
+    const fetchRates = vi.fn<FetchRates>(async ({ from, to, start }) => [
+      { from, to, date: start, rate: 25000 },
+    ]);
+
+    await runSchedulesService({ syncSuccess: true, fetchRates });
+
+    expect(fetchRates).toHaveBeenCalledTimes(1);
+    expect(await postedFor(id)).toEqual([
+      { date: db.toDateRepr(FIRST), amount: -39975000, native_amount: -1599 },
+      { date: db.toDateRepr(SECOND), amount: -41574000, native_amount: -1599 },
+    ]);
+  });
+
+  it('uses a nearby rate for a date that has no rate, such as a weekend', async () => {
+    await db.update('preferences', {
+      id: 'exchangeRateProvider',
+      value: 'frankfurter',
+    });
+    await saveRates({
+      rates: [
+        { from: 'USD', to: 'VND', date: '2016-12-02', rate: 20000 },
+        { from: 'USD', to: 'VND', date: SECOND, rate: 26000 },
+      ],
+      source: 'manual',
+    });
+    const id = await addLateSchedule({ account: 'wise-usd', amount: -1599 });
+    const fetchRates = vi.fn<FetchRates>(async () => []);
+
+    await runSchedulesService({ syncSuccess: true, fetchRates });
+
+    expect(await postedFor(id)).toEqual([
+      { date: db.toDateRepr(FIRST), amount: -31980000, native_amount: -1599 },
+      { date: db.toDateRepr(SECOND), amount: -41574000, native_amount: -1599 },
+    ]);
+  });
+
   it('stops when the download gives no rate', async () => {
     await db.update('preferences', {
       id: 'exchangeRateProvider',

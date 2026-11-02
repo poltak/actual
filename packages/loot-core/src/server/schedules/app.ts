@@ -8,8 +8,9 @@ import { logger } from '#platform/server/log';
 import { addTransactions } from '#server/accounts/sync';
 import { createApp } from '#server/app';
 import { aqlQuery } from '#server/aql';
+import { getForeignCurrencies } from '#server/currencies/base-currency';
 import { MissingRateError } from '#server/currencies/plan';
-import { ensureRates } from '#server/currencies/rates';
+import { ensureRates, getStoredRate, rateId } from '#server/currencies/rates';
 import type { FetchRates, RateRequest } from '#server/currencies/rates';
 import * as db from '#server/db';
 import { RuleError } from '#server/errors';
@@ -683,6 +684,10 @@ async function advanceRecurringScheduleFromNextDate(
  */
 export async function advanceSchedulesService(
   syncSuccess,
+  // The ids of the exact rates that a download already tried. With this
+  // input, a schedule waits for the rate of its own date, and a nearby
+  // rate is only for the dates that have none, such as a weekend.
+  triedRates?: Set<string>,
 ): Promise<{ missingRates: RateRequest[] }> {
   const missingRates: RateRequest[] = [];
 
@@ -766,6 +771,15 @@ export async function advanceSchedulesService(
 
           // Automatically create a transaction for due schedules.
           if (syncSuccess) {
+            const neededRate = triedRates
+              ? await findUntriedRate(currentSchedule, triedRates)
+              : null;
+            if (neededRate) {
+              // Nothing was written. The schedule stays due.
+              missingRates.push(neededRate);
+              break;
+            }
+
             try {
               await postTransactionForSchedule({ id: currentSchedule.id });
             } catch (error) {
@@ -880,10 +894,40 @@ export async function runSchedulesService({
   // A test gives its own function, so that it never uses the network
   fetchRates?: FetchRates;
 }): Promise<void> {
+  const triedRates = new Set<string>();
   const { missingRates } = await runMutator(() =>
-    advanceSchedulesService(syncSuccess),
+    advanceSchedulesService(syncSuccess, triedRates),
   );
-  await runAgainWithRates({ missingRates, syncSuccess, fetchRates });
+  await runAgainWithRates({
+    missingRates,
+    syncSuccess,
+    triedRates,
+    fetchRates,
+  });
+}
+
+// The exact rate for the next date of a schedule, when no stored rate
+// has that date and no download tried it
+async function findUntriedRate(
+  schedule: ScheduleEntity,
+  triedRates: Set<string>,
+): Promise<RateRequest | null> {
+  const { baseCurrency, foreignCurrencies } = await getForeignCurrencies();
+  const currency = foreignCurrencies.get(String(schedule._account));
+  if (!baseCurrency || !currency) {
+    return null;
+  }
+
+  const request = {
+    from: currency,
+    to: baseCurrency,
+    date: schedule.next_date,
+  };
+  if (triedRates.has(rateId(request))) {
+    return null;
+  }
+  const exact = await getStoredRate({ ...request, maxDays: 0 });
+  return exact ? null : request;
 }
 
 /**
@@ -893,10 +937,12 @@ export async function runSchedulesService({
 async function runAgainWithRates({
   missingRates: firstMissingRates,
   syncSuccess,
+  triedRates,
   fetchRates,
 }: {
   missingRates: RateRequest[];
   syncSuccess: boolean;
+  triedRates: Set<string>;
   fetchRates?: FetchRates;
 }): Promise<void> {
   let missingRates = firstMissingRates;
@@ -910,13 +956,14 @@ async function runAgainWithRates({
       requests: missingRates,
       ...(fetchRates && { fetchRates }),
     });
+    missingRates.forEach(request => triedRates.add(rateId(request)));
     if (missing.length >= missingRates.length || round === MAX_RATE_ROUNDS) {
       // No new rate, so a new run gives the same result
       return;
     }
 
     ({ missingRates } = await runMutator(() =>
-      advanceSchedulesService(syncSuccess),
+      advanceSchedulesService(syncSuccess, triedRates),
     ));
   }
 }
@@ -962,6 +1009,7 @@ let advancingAfterSync = false;
 
 async function advanceSchedulesAfterSync(
   syncSuccess: boolean,
+  triedRates: Set<string>,
 ): Promise<{ missingRates: RateRequest[] }> {
   const runDay = currentDay();
   // An earlier queued sync may have completed today's work already.
@@ -971,7 +1019,7 @@ async function advanceSchedulesAfterSync(
 
   advancingAfterSync = true;
   try {
-    const result = await advanceSchedulesService(syncSuccess);
+    const result = await advanceSchedulesService(syncSuccess, triedRates);
 
     // Rejected or offline runs must remain retryable on a later sync.
     if (syncSuccess) {
@@ -987,8 +1035,9 @@ async function advanceSchedulesAfterSync(
 async function runSchedulesServiceAfterSync(
   syncSuccess: boolean,
 ): Promise<void> {
+  const triedRates = new Set<string>();
   const { missingRates } = await runMutator(() =>
-    advanceSchedulesAfterSync(syncSuccess),
+    advanceSchedulesAfterSync(syncSuccess, triedRates),
   );
   if (missingRates.length === 0) {
     return;
@@ -997,7 +1046,7 @@ async function runSchedulesServiceAfterSync(
   // The runs with the downloaded rates write schedules too
   advancingAfterSync = true;
   try {
-    await runAgainWithRates({ missingRates, syncSuccess });
+    await runAgainWithRates({ missingRates, syncSuccess, triedRates });
   } finally {
     advancingAfterSync = false;
   }

@@ -7,7 +7,6 @@ import {
   currencies,
   FRANKFURTER_PROVIDER,
   getCurrency,
-  hidesFractionByDefault,
 } from '@actual-app/core/shared/currencies';
 import { css } from '@emotion/css';
 
@@ -142,7 +141,7 @@ export function CurrencySettings() {
     if (code !== '') {
       const cur = getCurrency(code);
       setNumberFormatPref(cur.numberFormat);
-      setHideFractionPref(hidesFractionByDefault(cur.code) ? 'true' : 'false');
+      setHideFractionPref(cur.decimalPlaces === 0 ? 'true' : 'false');
       // A currency code used as the symbol (e.g. "CHF 100") needs a space
       const isSpaceEnabled = !cur.symbolFirst || cur.symbol === cur.code;
       setSpaceEnabledPref(isSpaceEnabled ? 'true' : 'false');

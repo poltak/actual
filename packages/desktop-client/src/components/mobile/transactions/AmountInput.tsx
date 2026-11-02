@@ -13,10 +13,6 @@ import { FocusableAmountInput } from './FocusableAmountInput';
 export type AmountInputProps = Omit<CalculatorAmountInputProps, 'onFocus'> & {
   disableNativeAutoFocusOnIOS?: boolean;
   onFocus?: (event?: FocusEvent<HTMLInputElement>) => void;
-  // The currency of the amount when it is not the currency of the
-  // budget. The calculator input, an experimental feature, does not use
-  // it and shows the amount with the settings of the budget.
-  currency?: string | null;
 };
 
 export const AmountInput = memo(function AmountInput({
@@ -60,6 +56,7 @@ export const AmountInput = memo(function AmountInput({
         onFocus={onFocus}
         value={value}
         variant={variant}
+        currency={currency}
       />
     );
   }

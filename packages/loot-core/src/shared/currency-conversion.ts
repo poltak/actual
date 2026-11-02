@@ -1,13 +1,12 @@
-import { getDecimalPlaces } from './currencies';
 import { safeNumber } from './util';
 import type { IntegerAmount } from './util';
 
 /**
  * Converts an integer amount between two currencies.
  *
- * `rate` is the number of units of `toCurrency` for one unit of
- * `fromCurrency`. Each integer is in minor units of its own currency, so
- * the decimal places of the two currencies scale the result.
+ * `rate` is the number of units of the target currency for one unit of
+ * the source currency. Every currency is stored times 100, so the rate
+ * is all that the conversion needs.
  *
  * The absolute value is rounded and the sign is put back after that, so
  * `x` and `-x` always convert to opposite numbers. The two sides of a
@@ -16,22 +15,15 @@ import type { IntegerAmount } from './util';
 export function convertAmount({
   amount,
   rate,
-  fromCurrency,
-  toCurrency,
 }: {
   amount: IntegerAmount;
   rate: number;
-  fromCurrency: string;
-  toCurrency: string;
 }): IntegerAmount {
   if (!Number.isFinite(rate) || rate <= 0) {
     throw new Error('convertAmount: rate must be a positive number: ' + rate);
   }
 
-  const scale =
-    Math.pow(10, getDecimalPlaces(toCurrency)) /
-    Math.pow(10, getDecimalPlaces(fromCurrency));
-  const converted = Math.round(Math.abs(safeNumber(amount)) * rate * scale);
+  const converted = Math.round(Math.abs(safeNumber(amount)) * rate);
 
   // `|| 0` turns -0 into 0
   return safeNumber(Math.sign(amount) * converted || 0);
@@ -45,20 +37,13 @@ export function convertAmount({
 export function impliedRate({
   fromAmount,
   toAmount,
-  fromCurrency,
-  toCurrency,
 }: {
   fromAmount: IntegerAmount;
   toAmount: IntegerAmount;
-  fromCurrency: string;
-  toCurrency: string;
 }): number | null {
   if (fromAmount === 0 || toAmount === 0) {
     return null;
   }
 
-  const scale =
-    Math.pow(10, getDecimalPlaces(fromCurrency)) /
-    Math.pow(10, getDecimalPlaces(toCurrency));
-  return Math.abs(toAmount / fromAmount) * scale;
+  return Math.abs(toAmount / fromAmount);
 }

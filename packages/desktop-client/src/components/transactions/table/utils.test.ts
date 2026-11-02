@@ -180,7 +180,8 @@ describe('amounts in the currency of an account', () => {
   test('formatAmount shows the decimals of the currency', () => {
     expect(formatAmount(123456, 'USD')).toBe('1.234,56');
     expect(formatAmount(1000, 'USD')).toBe('10,00');
-    expect(formatAmount(1000, 'JPY')).toBe('1.000');
+    // A currency with no decimals is stored times 100 too
+    expect(formatAmount(100000, 'JPY')).toBe('1.000');
   });
 
   test('formatAmount follows the settings of the budget with no currency', () => {
@@ -206,14 +207,12 @@ describe('amounts in the currency of an account', () => {
     const serialized = serializeTransaction(usdRow, false, 'USD');
 
     expect(
-      deserializeTransaction({ ...serialized, debit: '12,5' }, usdRow, 'USD')
-        .amount,
+      deserializeTransaction({ ...serialized, debit: '12,5' }, usdRow).amount,
     ).toBe(-1250);
-    // A currency with no decimals has no smaller unit
+    // A currency with no decimals is stored times 100 too
     expect(
-      deserializeTransaction({ ...serialized, debit: '1.500' }, usdRow, 'JPY')
-        .amount,
-    ).toBe(-1500);
+      deserializeTransaction({ ...serialized, debit: '1.500' }, usdRow).amount,
+    ).toBe(-150000);
   });
 });
 

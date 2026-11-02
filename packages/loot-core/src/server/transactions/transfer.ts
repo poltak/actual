@@ -110,8 +110,6 @@ async function getOtherSideNativeAmount({
   return convertAmount({
     amount: -transaction.amount,
     rate: 1 / rate.rate,
-    fromCurrency: baseCurrency,
-    toCurrency: targetCurrency,
   });
 }
 

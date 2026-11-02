@@ -26,7 +26,7 @@ import { getServer } from '#server/server-config';
 import { batchMessages } from '#server/sync';
 import { batchUpdateTransactions } from '#server/transactions';
 import { undoable, withUndo } from '#server/undo';
-import { getCurrency, getDecimalPlaces } from '#shared/currencies';
+import { getCurrency } from '#shared/currencies';
 import { isNonProductionEnvironment } from '#shared/environment';
 import { dayFromDate } from '#shared/months';
 import * as monthUtils from '#shared/months';
@@ -646,7 +646,7 @@ async function createAccount({
           {
             id: uuidv4(),
             account: id,
-            amount: amountToInteger(balance, getDecimalPlaces(foreignCurrency)),
+            amount: amountToInteger(balance),
             ...(!offBudget && payee.category
               ? { category: payee.category }
               : {}),

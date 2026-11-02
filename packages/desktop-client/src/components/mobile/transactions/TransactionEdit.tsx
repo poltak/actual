@@ -35,7 +35,6 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { send } from '@actual-app/core/platform/client/connection';
 import { DEFAULT_MAX_DISTANCE_METERS } from '@actual-app/core/shared/constants';
-import { getDecimalPlaces } from '@actual-app/core/shared/currencies';
 import { calculateDistance } from '@actual-app/core/shared/location-utils';
 import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
@@ -141,26 +140,21 @@ function getFieldName(transactionId: TransactionEntity['id'], field: string) {
 
 // The currency of the amounts in the form, when the transaction is in a
 // foreign currency account. The form then holds the amount in the
-// currency of that account. An integer amount has the decimal places of
-// its currency, and the form of the budget currency always uses two.
+// currency of that account.
 function useFormCurrency() {
   const { pageCurrency } = useTableCurrencies();
-  return {
-    currency: pageCurrency,
-    decimalPlaces: pageCurrency ? getDecimalPlaces(pageCurrency) : 2,
-  };
+  return { currency: pageCurrency };
 }
 
 function serializeTransaction(
   transaction: TransactionEntity,
   dateFormat: string,
-  decimalPlaces = 2,
 ) {
   const { date, amount } = transaction;
   return {
     ...transaction,
     date: formatDate(parseISO(date), dateFormat),
-    amount: integerToAmount(amount || 0, decimalPlaces),
+    amount: integerToAmount(amount || 0),
   };
 }
 
@@ -168,7 +162,6 @@ function deserializeTransaction(
   transaction: TransactionEntity,
   originalTransaction: TransactionEntity | null,
   dateFormat: string,
-  decimalPlaces = 2,
 ) {
   const { amount, date: originalDate, ...realTransaction } = transaction;
 
@@ -205,7 +198,7 @@ function deserializeTransaction(
   return {
     ...realTransaction,
     date,
-    amount: amountToInteger(amount || 0, decimalPlaces),
+    amount: amountToInteger(amount || 0),
   };
 }
 
@@ -694,13 +687,13 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
     const [upcomingLength = DEFAULT_UPCOMING_SCHEDULE_DAYS] = useSyncedPref(
       'upcomingScheduledTransactionLength',
     );
-    const { currency, decimalPlaces } = useFormCurrency();
+    const { currency } = useFormCurrency();
     const transactions = useMemo(
       () =>
         unserializedTransactions.map(t =>
-          serializeTransaction(t, dateFormat, decimalPlaces),
+          serializeTransaction(t, dateFormat),
         ) || [],
-      [unserializedTransactions, dateFormat, decimalPlaces],
+      [unserializedTransactions, dateFormat],
     );
     const { data: { grouped: categoryGroups } = { grouped: [] } } =
       useCategories();
@@ -1493,7 +1486,7 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
                     void onUpdateInner(
                       childTrans,
                       'amount',
-                      integerToAmount(remaining, decimalPlaces),
+                      integerToAmount(remaining),
                     );
                   }}
                 />
@@ -1710,7 +1703,6 @@ function TransactionEditUnconnected({
   const foreignCurrencyOfRef = useRef(foreignCurrencyOf);
   foreignCurrencyOfRef.current = foreignCurrencyOf;
   const formCurrency = foreignCurrencyOf(transactions[0]?.account);
-  const formDecimalPlaces = formCurrency ? getDecimalPlaces(formCurrency) : 2;
 
   const searchParamCategory = useMemo(
     () => categories.find(c => c.name === searchParams.get('category'))?.id,
@@ -1837,7 +1829,6 @@ function TransactionEditUnconnected({
         serializedTransaction,
         null,
         dateFormat,
-        formDecimalPlaces,
       );
 
       // Run the rules to auto-fill in any data. Right now we only do
@@ -1990,7 +1981,7 @@ function TransactionEditUnconnected({
         }
       }
     },
-    [dateFormat, isLocationGranted, formDecimalPlaces],
+    [dateFormat, isLocationGranted],
   );
 
   const onSave = useCallback(
@@ -2152,11 +2143,11 @@ function TransactionEditUnconnected({
     }
 
     const updated = {
-      ...serializeTransaction(transaction, dateFormat, formDecimalPlaces),
+      ...serializeTransaction(transaction, dateFormat),
       payee: nearestPayee.id,
     };
     void onUpdate(updated, 'payee');
-  }, [transactions, nearestPayee, onUpdate, dateFormat, formDecimalPlaces]);
+  }, [transactions, nearestPayee, onUpdate, dateFormat]);
 
   if (accounts.length === 0) {
     return (

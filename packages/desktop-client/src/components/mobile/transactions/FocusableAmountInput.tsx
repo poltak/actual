@@ -25,7 +25,6 @@ import { useFormat } from '#hooks/useFormat';
 import { useMergedRefs } from '#hooks/useMergedRefs';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 
-
 type AmountInputProps = {
   value: number;
   // The currency of the amount when it is not the currency of the budget

@@ -1315,7 +1315,6 @@ const Transaction = memo(function Transaction({
       const deserialized = deserializeTransaction(
         newTransaction,
         originalTransaction,
-        amountCurrency,
       );
       // Run the transaction through the formatting so that we know
       // it's always showing the formatted result

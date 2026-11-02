@@ -7,30 +7,24 @@ describe('convertAmount', () => {
       convertAmount({
         amount: -800,
         rate: 25954,
-        fromCurrency: 'USD',
-        toCurrency: 'VND',
       }),
     ).toBe(-20763200);
   });
 
-  it('scales by the decimal places of each currency', () => {
-    // 10.00 USD at 150.25 JPY for one USD. JPY is stored with no decimals.
+  it('stores a currency with no decimals times 100 too', () => {
+    // 10.00 USD at 150.25 JPY for one USD
     expect(
       convertAmount({
         amount: 1000,
         rate: 150.25,
-        fromCurrency: 'USD',
-        toCurrency: 'JPY',
       }),
-    ).toBe(1503);
+    ).toBe(150250);
 
-    // 1,503 JPY back to USD cents
+    // 1,502.50 JPY back to USD cents
     expect(
       convertAmount({
-        amount: 1503,
+        amount: 150250,
         rate: 1 / 150.25,
-        fromCurrency: 'JPY',
-        toCurrency: 'USD',
       }),
     ).toBe(1000);
   });
@@ -40,14 +34,10 @@ describe('convertAmount', () => {
     const positive = convertAmount({
       amount: 25,
       rate: 0.5,
-      fromCurrency: 'EUR',
-      toCurrency: 'USD',
     });
     const negative = convertAmount({
       amount: -25,
       rate: 0.5,
-      fromCurrency: 'EUR',
-      toCurrency: 'USD',
     });
 
     expect(positive).toBe(13);
@@ -58,8 +48,6 @@ describe('convertAmount', () => {
     const result = convertAmount({
       amount: -0,
       rate: 25954,
-      fromCurrency: 'USD',
-      toCurrency: 'VND',
     });
 
     expect(Object.is(result, 0)).toBe(true);
@@ -71,8 +59,6 @@ describe('convertAmount', () => {
         convertAmount({
           amount: 100,
           rate,
-          fromCurrency: 'USD',
-          toCurrency: 'VND',
         }),
       ).toThrow('rate must be a positive number');
     }
@@ -83,8 +69,6 @@ describe('convertAmount', () => {
       convertAmount({
         amount: 1.5,
         rate: 2,
-        fromCurrency: 'USD',
-        toCurrency: 'VND',
       }),
     ).toThrow('not an integer');
   });
@@ -96,8 +80,6 @@ describe('impliedRate', () => {
     const rate = impliedRate({
       fromAmount: -198899,
       toAmount: 5072987300,
-      fromCurrency: 'USD',
-      toCurrency: 'VND',
     });
 
     expect(rate).toBeCloseTo(25505.3434, 4);
@@ -107,28 +89,22 @@ describe('impliedRate', () => {
     const rate = impliedRate({
       fromAmount: -198899,
       toAmount: 5072987300,
-      fromCurrency: 'USD',
-      toCurrency: 'VND',
     });
 
     expect(
       convertAmount({
         amount: -198899,
         rate: rate!,
-        fromCurrency: 'USD',
-        toCurrency: 'VND',
       }),
     ).toBe(-5072987300);
   });
 
-  it('takes the decimal places of each currency into account', () => {
+  it('uses the same scale for a currency with no decimals', () => {
     // 10.00 USD became 1,503 JPY
     expect(
       impliedRate({
         fromAmount: 1000,
-        toAmount: 1503,
-        fromCurrency: 'USD',
-        toCurrency: 'JPY',
+        toAmount: 150300,
       }),
     ).toBeCloseTo(150.3, 6);
   });
@@ -138,16 +114,12 @@ describe('impliedRate', () => {
       impliedRate({
         fromAmount: 0,
         toAmount: 100,
-        fromCurrency: 'USD',
-        toCurrency: 'VND',
       }),
     ).toBeNull();
     expect(
       impliedRate({
         fromAmount: 100,
         toAmount: 0,
-        fromCurrency: 'USD',
-        toCurrency: 'VND',
       }),
     ).toBeNull();
   });

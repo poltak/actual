@@ -14,7 +14,6 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import {
   amountToInteger,
-  appendDecimals,
   currencyToAmount,
   reapplyThousandSeparators,
 } from '@actual-app/core/shared/util';
@@ -24,6 +23,8 @@ import { makeAmountFullStyle } from '#components/budget/util';
 import { useFormat } from '#hooks/useFormat';
 import { useMergedRefs } from '#hooks/useMergedRefs';
 import { useSyncedPref } from '#hooks/useSyncedPref';
+
+import { appendFieldDecimals } from './fieldAmount';
 
 type AmountInputProps = {
   value: number;
@@ -126,10 +127,11 @@ const AmountInput = memo(function AmountInput({
       // Typed digits are whole units, whatever the hideFraction setting
       text = format.forEdit(amountToInteger(Number(text.replace(/\D/g, ''))));
     } else {
-      text = appendDecimals(
-        reapplyThousandSeparators(text),
-        !currency && String(hideFraction) === 'true',
-      );
+      text = appendFieldDecimals({
+        text: reapplyThousandSeparators(text),
+        hideDecimals: String(hideFraction) === 'true',
+        currencyCode: currency,
+      });
     }
     setEditing(true);
     setText(text);

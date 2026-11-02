@@ -11,7 +11,6 @@ import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { spacing } from '@actual-app/components/tokens';
 import { View } from '@actual-app/components/view';
-import { integerToCurrency } from '@actual-app/core/shared/util';
 import type { AccountEntity } from '@actual-app/core/types/models';
 import type { TransObjectLiteral } from '@actual-app/core/types/util';
 
@@ -24,8 +23,10 @@ import { MobileSheet } from '#components/mobile/MobileSheet';
 import { MobileSheetActions } from '#components/mobile/MobileSheetActions';
 import { MobileSheetCategoryPicker } from '#components/mobile/MobileSheetCategoryPicker';
 import { MobileSheetPickerField } from '#components/mobile/MobileSheetPickerField';
+import { useForeignCurrencyOf } from '#hooks/useAccountCurrencies';
 import { useAccounts } from '#hooks/useAccounts';
 import { useCategories } from '#hooks/useCategories';
+import { useFormat } from '#hooks/useFormat';
 import { pushModal } from '#modals/modalsSlice';
 import type { Modal as ModalType } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
@@ -59,6 +60,7 @@ export function CloseAccountModal({
     },
   } = useCategories();
   const [isClosing, setIsClosing] = useState(false);
+  const format = useFormat(useForeignCurrencyOf(account));
   const [transferAccountId, setTransferAccountId] = useState('');
   const transferAccount = accounts.find(a => a.id === transferAccountId);
   const [categoryId, setCategoryId] = useState('');
@@ -131,7 +133,7 @@ export function CloseAccountModal({
       <Trans>
         This account has a balance of{' '}
         <strong>
-          {{ balance: integerToCurrency(balance) } as TransObjectLiteral}
+          {{ balance: format(balance, 'financial') } as TransObjectLiteral}
         </strong>
         . To close this account, select a different account to transfer this
         balance to:

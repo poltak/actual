@@ -35,6 +35,7 @@ import { Modal, ModalCloseButton, ModalHeader } from '#components/common/Modal';
 import { SectionLabel } from '#components/forms';
 import { LabeledCheckbox } from '#components/forms/LabeledCheckbox';
 import { TableHeader, TableWithNavigator } from '#components/table';
+import { useAccountCurrencies } from '#hooks/useAccountCurrencies';
 import { useCategories } from '#hooks/useCategories';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useSyncedPrefs } from '#hooks/useSyncedPrefs';
@@ -209,6 +210,8 @@ export function ImportTransactionsModal({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { foreignCurrencyOf } = useAccountCurrencies();
+  const foreignCurrency = foreignCurrencyOf(accountId);
   const dateFormat = useDateFormat() || ('MM/dd/yyyy' as const);
   const [prefs, savePrefs] = useSyncedPrefs();
   const { data: { list: categories } = { list: [] } } = useCategories();
@@ -997,6 +1000,7 @@ export function ImportTransactionsModal({
                 renderItem={({ item, index }) => (
                   <View>
                     <Transaction
+                      currency={foreignCurrency}
                       transaction={item}
                       index={index}
                       showParsed={filetype === 'csv' || filetype === 'qif'}

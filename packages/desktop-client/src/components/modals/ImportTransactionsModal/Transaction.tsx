@@ -8,10 +8,10 @@ import { styles } from '@actual-app/components/styles';
 import { theme } from '@actual-app/components/theme';
 import { Tooltip } from '@actual-app/components/tooltip';
 import { View } from '@actual-app/components/view';
-import { amountToCurrency } from '@actual-app/core/shared/util';
 import type { CategoryEntity } from '@actual-app/core/types/models';
 
 import { Checkbox } from '#components/forms';
+import { formatFieldAmount } from '#components/mobile/transactions/fieldAmount';
 import { Field, Row } from '#components/table';
 
 import { ParsedDate } from './ParsedDate';
@@ -33,6 +33,8 @@ type TransactionProps = {
   onCheckTransaction: (transactionId: string) => void;
   reconcile: boolean;
   index: number;
+  // The currency of the amounts when it is not the currency of the budget
+  currency?: string | null;
 };
 
 export function Transaction({
@@ -50,6 +52,7 @@ export function Transaction({
   onCheckTransaction,
   reconcile,
   index,
+  currency,
 }: TransactionProps) {
   const { t } = useTranslation();
 
@@ -255,10 +258,10 @@ export function Transaction({
             title={
               outflow === null
                 ? t('Invalid: unable to parse the value')
-                : amountToCurrency(outflow)
+                : formatFieldAmount(outflow, currency)
             }
           >
-            {amountToCurrency(outflow || 0)}
+            {formatFieldAmount(outflow || 0, currency)}
           </Field>
           <Field
             width={90}
@@ -272,10 +275,10 @@ export function Transaction({
             title={
               inflow === null
                 ? t('Invalid: unable to parse the value')
-                : amountToCurrency(inflow)
+                : formatFieldAmount(inflow, currency)
             }
           >
-            {amountToCurrency(inflow || 0)}
+            {formatFieldAmount(inflow || 0, currency)}
           </Field>
         </>
       ) : (
@@ -291,10 +294,10 @@ export function Transaction({
               ? t('Invalid: unable to parse the value ({{amount}})', {
                   amount: transaction.amount,
                 })
-              : amountToCurrency(amount)
+              : formatFieldAmount(amount, currency)
           }
         >
-          {amountToCurrency(amount || 0)}
+          {formatFieldAmount(amount || 0, currency)}
         </Field>
       )}
     </Row>

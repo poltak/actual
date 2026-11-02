@@ -1,9 +1,4 @@
-import {
-  currencies,
-  getDecimalPlaces,
-  hidesFractionByDefault,
-  isForeignCurrency,
-} from './currencies';
+import { currencies, getDecimalPlaces, isForeignCurrency } from './currencies';
 
 describe('getDecimalPlaces', () => {
   it('returns 2 for empty string (None)', () => {
@@ -26,10 +21,11 @@ describe('getDecimalPlaces', () => {
     expect(getDecimalPlaces('XYZ')).toBe(2);
   });
 
-  it('returns 2 for VND, because every amount is still stored times 100', () => {
-    // A change to 0 here would divide all stored VND amounts by 100 on screen.
+  it('returns 0 for VND, which is written with no decimals', () => {
+    // This decides the digits on screen. VND is stored times 100 like
+    // every other currency.
     expect(currencies.some(currency => currency.code === 'VND')).toBe(true);
-    expect(getDecimalPlaces('VND')).toBe(2);
+    expect(getDecimalPlaces('VND')).toBe(0);
   });
 });
 
@@ -74,20 +70,5 @@ describe('isForeignCurrency', () => {
     expect(
       isForeignCurrency({ currency: undefined, baseCurrency: 'VND' }),
     ).toBe(false);
-  });
-});
-
-describe('hidesFractionByDefault', () => {
-  it('is true for a currency with no decimal places', () => {
-    expect(hidesFractionByDefault('JPY')).toBe(true);
-  });
-
-  it('is true for VND, which is stored with 2 decimal places', () => {
-    expect(hidesFractionByDefault('VND')).toBe(true);
-  });
-
-  it('is false for a currency with decimals in daily use', () => {
-    expect(hidesFractionByDefault('USD')).toBe(false);
-    expect(hidesFractionByDefault('')).toBe(false);
   });
 });

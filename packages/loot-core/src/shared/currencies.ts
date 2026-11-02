@@ -74,9 +74,7 @@ export const currencies: Currency[] = [
   { code: 'USD', name: 'US Dollar', symbol: '$', decimalPlaces: 2, numberFormat: 'comma-dot', symbolFirst: true },
   { code: 'UYU', name: 'Uruguayan Peso', symbol: '$U', decimalPlaces: 2, numberFormat: 'dot-comma', symbolFirst: true },
   { code: 'UZS', name: 'Uzbek Soum', symbol: 'UZS', decimalPlaces: 2, numberFormat: 'space-comma', symbolFirst: false },
-  // VND has no minor unit in daily use. It keeps 2 decimal places here because the
-  // transaction table and the importers still store every amount times 100.
-  { code: 'VND', name: 'Vietnamese Dong', symbol: '₫', decimalPlaces: 2, numberFormat: 'dot-comma', symbolFirst: false },
+  { code: 'VND', name: 'Vietnamese Dong', symbol: '₫', decimalPlaces: 0, numberFormat: 'dot-comma', symbolFirst: false },
   { code: 'ZAR', name: 'South African Rand', symbol: 'R', decimalPlaces: 2, numberFormat: 'space-comma', symbolFirst: true },
 ];
 
@@ -104,18 +102,4 @@ export function isForeignCurrency({
   baseCurrency: string | null | undefined;
 }): boolean {
   return currency != null && currency !== '' && currency !== baseCurrency;
-}
-
-// Stored with 2 decimal places, but written with none in daily use
-const CURRENCIES_SHOWN_WITH_NO_FRACTION = new Set(['VND']);
-
-/**
- * Says if "Hide decimal places" is the usual setting for a budget in
- * this currency.
- */
-export function hidesFractionByDefault(currencyCode: string): boolean {
-  return (
-    getDecimalPlaces(currencyCode) === 0 ||
-    CURRENCIES_SHOWN_WITH_NO_FRACTION.has(currencyCode)
-  );
 }

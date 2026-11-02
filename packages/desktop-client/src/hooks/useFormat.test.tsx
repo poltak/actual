@@ -76,7 +76,7 @@ describe('useFormat', () => {
       'VND',
     );
 
-    expect(format(25000000, 'financial')).toBe(`250,000.00${NARROW_SPACE}₫`);
+    expect(format(25000000, 'financial')).toBe(`250,000${NARROW_SPACE}₫`);
   });
 
   it('uses the settings of the budget when the code is the currency of the budget', () => {

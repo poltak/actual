@@ -26,6 +26,8 @@ type ValueProps<T> = {
   data?: unknown;
   describe?: (item: T) => string;
   style?: CSSProperties;
+  // The currency of an amount when it is not the currency of the budget
+  currency?: string | null;
 };
 
 export function Value<T>({
@@ -37,9 +39,10 @@ export function Value<T>({
   // @ts-expect-error fix this later
   describe = x => x.name,
   style,
+  currency,
 }: ValueProps<T>) {
   const { t } = useTranslation();
-  const format = useFormat();
+  const format = useFormat(currency);
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const { data: payees } = usePayees();
   const {

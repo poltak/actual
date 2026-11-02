@@ -17,6 +17,8 @@ type AppliedFiltersProps = {
   conditionsOp: 'and' | 'or';
   onConditionsOpChange: (value: 'and' | 'or') => void;
   style?: CSSProperties;
+  // The currency of the amounts when it is not the currency of the budget
+  currency?: string | null;
 };
 
 export function AppliedFilters({
@@ -26,6 +28,7 @@ export function AppliedFilters({
   conditionsOp,
   onConditionsOpChange,
   style = {},
+  currency,
 }: AppliedFiltersProps) {
   return (
     <View
@@ -49,6 +52,7 @@ export function AppliedFilters({
           op={filter.op}
           value={filter.value}
           options={filter.options}
+          currency={currency}
           onChange={newFilter => onUpdate(filter, newFilter)}
           onDelete={() => onDelete(filter)}
         />

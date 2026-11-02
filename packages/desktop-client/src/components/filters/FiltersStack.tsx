@@ -21,6 +21,7 @@ export function FiltersStack({
   filterId,
   savedFilters,
   onConditionsOpChange,
+  currency,
 }: {
   conditions: RuleConditionEntity[];
   conditionsOp: 'and' | 'or';
@@ -34,6 +35,8 @@ export function FiltersStack({
   filterId?: SavedFilter;
   savedFilters: TransactionFilterEntity[];
   onConditionsOpChange: (value: 'and' | 'or') => void;
+  // The currency of the amounts when it is not the currency of the budget
+  currency?: string | null;
 }) {
   return (
     <View>
@@ -48,6 +51,7 @@ export function FiltersStack({
           onConditionsOpChange={onConditionsOpChange}
           onUpdate={onUpdateFilter}
           onDelete={onDeleteFilter}
+          currency={currency}
         />
         <View style={{ flex: 1 }} />
         <SavedFilterMenuButton

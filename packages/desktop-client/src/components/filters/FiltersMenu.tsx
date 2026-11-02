@@ -84,6 +84,8 @@ type ConfigureFieldProps<T extends RuleConditionEntity> =
   FilterReducerState<T> &
     Pick<T, 'options'> & {
       initialSubfield?: string;
+      // The currency of an amount when it is not the currency of the budget
+      currency?: string | null;
       dispatch: (action: FilterReducerAction) => void;
       onApply: (cond: T) => void;
     };
@@ -93,11 +95,12 @@ function ConfigureField<T extends RuleConditionEntity>({
   initialSubfield = initialField,
   op,
   value,
+  currency,
   dispatch,
   onApply,
 }: ConfigureFieldProps<T>) {
   const { t } = useTranslation();
-  const format = useFormat();
+  const format = useFormat(currency);
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const accounts = useAccounts();
   const categories = useCategories();
@@ -487,6 +490,7 @@ function ConfigureField<T extends RuleConditionEntity>({
           <AmountInput
             ref={inputRef}
             value={typeof value === 'number' ? value : 0}
+            currency={currency}
             zeroSign="+"
             sign={
               fieldOptions?.inflow || fieldOptions?.outflow ? '+' : undefined
@@ -577,6 +581,8 @@ type FilterButtonProps<T extends RuleConditionEntity> = {
   exclude?: string[];
   /** If both are provided, `include` acts as the allowlist before `exclude` is applied. */
   include?: string[];
+  // The currency of an amount when it is not the currency of the budget
+  currency?: string | null;
 };
 
 /**
@@ -606,6 +612,7 @@ export function FilterButton<T extends RuleConditionEntity>({
   hover,
   exclude,
   include,
+  currency,
 }: FilterButtonProps<T>) {
   const { t } = useTranslation();
   const filters = useTransactionFilters();
@@ -821,6 +828,7 @@ export function FilterButton<T extends RuleConditionEntity>({
             field={state.field}
             op={state.op}
             value={state.value}
+            currency={currency}
             dispatch={dispatch}
             onApply={onValidateAndApply}
           />
@@ -832,6 +840,8 @@ export function FilterButton<T extends RuleConditionEntity>({
 
 type FilterEditorProps<T extends RuleConditionEntity> = FilterReducerState<T> &
   Pick<T, 'options'> & {
+    // The currency of an amount when it is not the currency of the budget
+    currency?: string | null;
     onSave: (cond: T) => void;
     onClose: () => void;
   };
@@ -841,6 +851,7 @@ export function FilterEditor<T extends RuleConditionEntity>({
   op,
   value,
   options,
+  currency,
   onSave,
   onClose,
 }: FilterEditorProps<T>) {
@@ -867,6 +878,7 @@ export function FilterEditor<T extends RuleConditionEntity>({
       op={state.op}
       value={state.value}
       options={options}
+      currency={currency}
       dispatch={dispatch}
       onApply={cond => {
         // @ts-expect-error - fix me

@@ -374,7 +374,7 @@ export function AccountHeader({
           )}
           <View style={{ flexShrink: 0 }}>
             {/* @ts-expect-error fix me */}
-            <FilterButton onApply={onApplyFilter} />
+            <FilterButton onApply={onApplyFilter} currency={foreignCurrency} />
           </View>
           <View style={{ flex: 1 }} />
 
@@ -578,6 +578,7 @@ export function AccountHeader({
             filterId={filterId}
             savedFilters={savedFilters}
             onConditionsOpChange={onConditionsOpChange}
+            currency={foreignCurrency}
           />
         )}
       </View>

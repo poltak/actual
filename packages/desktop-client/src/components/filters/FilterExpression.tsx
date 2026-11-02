@@ -25,6 +25,8 @@ type FilterExpressionProps<T extends RuleConditionEntity> = {
   value: T['value'];
   options: T['options'];
   style?: CSSProperties;
+  // The currency of an amount when it is not the currency of the budget
+  currency?: string | null;
   onChange: (cond: T) => void;
   onDelete: () => void;
 };
@@ -36,6 +38,7 @@ export function FilterExpression<T extends RuleConditionEntity>({
   value,
   options,
   style,
+  currency,
   onChange,
   onDelete,
 }: FilterExpressionProps<T>) {
@@ -89,6 +92,7 @@ export function FilterExpression<T extends RuleConditionEntity>({
                 <Value
                   value={value}
                   field={field}
+                  currency={currency}
                   inline
                   valueIsRaw={
                     op === 'contains' ||
@@ -155,6 +159,7 @@ export function FilterExpression<T extends RuleConditionEntity>({
           op={op}
           value={value}
           options={options}
+          currency={currency}
           onSave={onChange}
           onClose={() => setEditing(false)}
         />

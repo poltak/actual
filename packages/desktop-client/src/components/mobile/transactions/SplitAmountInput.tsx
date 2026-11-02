@@ -68,6 +68,7 @@ export const SplitAmountInput = memo(function SplitAmountInput({
           minWidth: 0,
         }}
         value={value}
+        currency={currency}
       />
     );
   }

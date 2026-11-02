@@ -40,4 +40,16 @@ describe('FocusableAmountInput', () => {
     }
     expect(input.value).toBe('12,50');
   });
+
+  it('takes typed digits as whole units in a foreign currency without decimals', () => {
+    prefs.values = { defaultCurrencyCode: 'USD' };
+    setNumberFormat({ format: 'comma-dot', hideFraction: false });
+    render(<FocusableAmountInput value={0} focused currency="VND" />);
+
+    const input = screen.getByTestId<HTMLInputElement>('amount-input');
+    for (const digit of '50000') {
+      fireEvent.change(input, { target: { value: input.value + digit } });
+    }
+    expect(input.value).toBe('50,000');
+  });
 });
